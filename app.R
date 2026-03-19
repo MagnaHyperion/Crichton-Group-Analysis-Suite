@@ -1059,6 +1059,20 @@ ui <- page_navbar(
           sliderInput("contour_threshold", NULL,
             min = 0, max = 0.95, value = 0, step = 0.05,
             width = "100%"
+          ),
+          br(),
+          tags$button("\u2705  Temperature Range", class = "adv-toggle",
+            onclick = "$('#contour_yrange_panel').slideToggle(200)"),
+          div(id = "contour_yrange_panel", style = "display:none;",
+            div(class = "settings-group",
+              div(class = "settings-group-title", "Tm Plot Y-Axis Range (\u00b0C)"),
+              div(style = "font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;",
+                "Full data range shown by default. Adjust to zoom in on a specific region."),
+              fluidRow(
+                column(6, numericInput("contour_ymin", "Min", value = 25.5, step = 1, width = "100%")),
+                column(6, numericInput("contour_ymax", "Max", value = 89.5, step = 1, width = "100%"))
+              )
+            )
           )
         ),
         
@@ -2835,8 +2849,10 @@ server <- function(input, output, session) {
       min(diff(sort(unique(log_x)))) * 0.85
     } else { 0.4 }
     
-    # ---- Build background tile data (40–80°C, normalised) ----
-    temp_mask <- processed$temperatures >= 40 & processed$temperatures <= 80
+    # ---- Build background tile data (full temperature range) ----
+    y_lo      <- if (!is.na(input$contour_ymin)) input$contour_ymin else min(processed$temperatures)
+    y_hi      <- if (!is.na(input$contour_ymax)) input$contour_ymax else max(processed$temperatures)
+    temp_mask <- processed$temperatures >= y_lo & processed$temperatures <= y_hi
     temps_sub <- processed$temperatures[temp_mask]
     temp_step <- if (length(temps_sub) > 1) mean(diff(temps_sub)) else 1.0
     
@@ -2954,8 +2970,8 @@ server <- function(input, output, session) {
         expand = expansion(mult = 0.06)
       ) +
       scale_y_continuous(
-        limits = c(40, 80),
-        breaks = seq(40, 80, by = 5),
+        limits = c(y_lo, y_hi),
+        breaks = pretty(c(y_lo, y_hi), n = 8),
         expand = c(0, 0)
       ) +
       labs(
@@ -3092,7 +3108,9 @@ server <- function(input, output, session) {
       x_breaks  <- seq(floor(min(log_x)), ceiling(max(log_x)))
       tile_w    <- if (length(unique(log_x)) > 1) min(diff(sort(unique(log_x)))) * 0.85 else 0.4
 
-      temp_mask <- processed$temperatures >= 40 & processed$temperatures <= 80
+      y_lo      <- if (!is.na(isolate(input$contour_ymin))) isolate(input$contour_ymin) else min(processed$temperatures)
+      y_hi      <- if (!is.na(isolate(input$contour_ymax))) isolate(input$contour_ymax) else max(processed$temperatures)
+      temp_mask <- processed$temperatures >= y_lo & processed$temperatures <= y_hi
       temps_sub <- processed$temperatures[temp_mask]
       temp_step <- if (length(temps_sub) > 1) mean(diff(temps_sub)) else 1.0
 
@@ -3120,7 +3138,8 @@ server <- function(input, output, session) {
                    size = 3.8, shape = 21, stroke = 1.8, inherit.aes = FALSE) +
         scale_x_continuous(breaks = x_breaks, labels = as.character(x_breaks),
                            expand = expansion(mult = 0.06)) +
-        scale_y_continuous(limits = c(40, 80), breaks = seq(40, 80, by = 5), expand = c(0, 0)) +
+        scale_y_continuous(limits = c(y_lo, y_hi),
+                           breaks = pretty(c(y_lo, y_hi), n = 8), expand = c(0, 0)) +
         labs(x = "Log [Concentration (\u03bcM)]",
              y = "Temperature (\u00b0C)") +
         theme_minimal(base_size = 12) +
