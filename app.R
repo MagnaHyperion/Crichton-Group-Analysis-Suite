@@ -601,7 +601,35 @@ custom_css <- "
   .dtm-positive { fill: var(--accent-green) !important; }
   .dtm-negative { fill: var(--danger) !important; }
 
-  /* ---- AKTA integration region ---- */
+  /* ---- QC mode toggle ---- */
+  .qc-mode-toggle {
+    display: inline-flex;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 1rem;
+  }
+  .qc-mode-btn {
+    padding: 0.35rem 1.1rem;
+    border: none;
+    border-radius: 6px;
+    font-family: var(--font-head);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: transparent;
+    color: var(--muted);
+  }
+  .qc-mode-btn.active {
+    background: var(--accent);
+    color: var(--bg-deep);
+    box-shadow: 0 2px 8px rgba(0,194,255,0.3);
+  }
+  .qc-mode-btn:not(.active):hover { color: var(--txt); }
   .integration-hint {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -807,12 +835,30 @@ ui <- page_navbar(
         div(class = "lab-card",
           div(class = "lab-card-title", span(class = "step-number", "5"), "Peak Integration"),
           div(class = "info-box", tags$span("ℹ", class = "info-icon"),
-            "Enter volume boundaries to integrate the first file's UV trace. Reports area and % purity relative to total."),
+            "Enter volume boundaries to integrate the UV trace. Reports area, purity, centroid elution volume, and estimated MW."),
           fluidRow(
             column(6, numericInput("akta_int_start", "From (mL)", value = NA, min = 0, step = 0.1)),
             column(6, numericInput("akta_int_end",   "To (mL)",   value = NA, min = 0, step = 0.1))
           ),
-          uiOutput("akta_integration_result")
+          tags$button("\u2699  Column Calibration", class = "adv-toggle",
+            onclick = "$('#akta_calib_panel').slideToggle(200)"),
+          div(id = "akta_calib_panel", style = "display:none;",
+            div(class = "settings-group",
+              div(class = "settings-group-title", "SEC Column Calibration"),
+              div(style = "font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;",
+                "Defaults calibrated for your column. Update if using a different column."),
+              fluidRow(
+                column(6, numericInput("akta_void_vol",  "Void vol. (mL)",  value = 8.23,  min = 0, step = 0.01)),
+                column(6, numericInput("akta_total_vol", "Total vol. (mL)", value = 24.00, min = 0, step = 0.01))
+              ),
+              div(style = "font-size:0.72rem;color:var(--muted);",
+                "MW = 10^(\u22123.2245 \u00d7 (Ve\u2212Void)/(Total\u2212Void) + 5.9275)")
+            )
+          ),
+          br(),
+          uiOutput("akta_integration_result"),
+          br(),
+          uiOutput("akta_integration_actions")
         ),
         div(class = "lab-card",
           div(class = "lab-card-title", span(class = "step-number", "6"), "Plot Style"),
@@ -1164,13 +1210,29 @@ ui <- page_navbar(
         p("Place tm_analysis_functions.R in the same folder as app.R and restart.", style = "color:#7A8FAD;"))
     } else tagList(
 
-    # Clear data button
     div(class = "clear-button-container",
-      actionButton("qc_clear", "🔄  Clear All Data", class = "btn-clear")
+      actionButton("qc_clear", "\U0001f504  Clear All Data", class = "btn-clear")
     ),
 
+    # ---- Mode toggle --------------------------------------------------------
+    div(style = "padding: 0 1rem 0.5rem;",
+      div(class = "qc-mode-toggle",
+        tags$button("Simple (2 samples)", id = "qc_btn_simple", class = "qc-mode-btn active",
+          onclick = "Shiny.setInputValue('qc_mode', 'simple', {priority: 'event'});
+                     document.getElementById('qc_btn_simple').classList.add('active');
+                     document.getElementById('qc_btn_multi').classList.remove('active');"),
+        tags$button("Multi-Sample (3\u201310)", id = "qc_btn_multi", class = "qc-mode-btn",
+          onclick = "Shiny.setInputValue('qc_mode', 'multi', {priority: 'event'});
+                     document.getElementById('qc_btn_multi').classList.add('active');
+                     document.getElementById('qc_btn_simple').classList.remove('active');")
+      )
+    ),
+
+    # =========================================================================
+    # SIMPLE MODE
+    # =========================================================================
+    conditionalPanel("input.qc_mode == 'simple' || input.qc_mode == null || input.qc_mode == undefined",
     fluidRow(
-      # Left controls
       column(4,
         div(class = "lab-card",
           div(class = "lab-card-title", span(class = "step-number", "1"), "Upload Data File"),
@@ -1195,8 +1257,7 @@ ui <- page_navbar(
                   style = "width:2.2rem;height:2.2rem;border:1px solid #1E2D45;border-radius:6px;background:transparent;cursor:pointer;padding:0.1rem;flex-shrink:0;",
                   onchange = "Shiny.setInputValue('qc_col_a', this.value);",
                   oninput  = "Shiny.setInputValue('qc_col_a', this.value);"),
-                textInput("qc_col_a", NULL, value = "#E41A1C",
-                  width = "90px")))
+                textInput("qc_col_a", NULL, value = "#E41A1C", width = "90px")))
           ),
           fluidRow(
             column(8, textInput("qc_label_b", "Label B", value = "+GDP")),
@@ -1206,8 +1267,7 @@ ui <- page_navbar(
                   style = "width:2.2rem;height:2.2rem;border:1px solid #1E2D45;border-radius:6px;background:transparent;cursor:pointer;padding:0.1rem;flex-shrink:0;",
                   onchange = "Shiny.setInputValue('qc_col_b', this.value);",
                   oninput  = "Shiny.setInputValue('qc_col_b', this.value);"),
-                textInput("qc_col_b", NULL, value = "#377EB8",
-                  width = "90px")))
+                textInput("qc_col_b", NULL, value = "#377EB8", width = "90px")))
           )
         ),
         div(class = "lab-card",
@@ -1232,8 +1292,6 @@ ui <- page_navbar(
           uiOutput("qc_download_buttons")
         )
       ),
-
-      # Right panel - three plots stacked
       column(8,
         uiOutput("qc_badges"),
         div(class = "lab-card",
@@ -1251,6 +1309,64 @@ ui <- page_navbar(
         )
       )
     )
+    ), # end conditionalPanel simple
+
+    # =========================================================================
+    # MULTI-SAMPLE MODE
+    # =========================================================================
+    conditionalPanel("input.qc_mode == 'multi'",
+    fluidRow(
+      column(4,
+        div(class = "lab-card",
+          div(class = "lab-card-title", span(class = "step-number", "1"), "Upload Data File"),
+          div(class = "info-box", tags$span("\u2139", class = "info-icon"),
+            "Same file format as Simple mode. Re-use an already uploaded file by switching modes without re-uploading."),
+          fileInput("mqc_file", NULL, accept = ".csv",
+            buttonLabel = "Browse\u2026", placeholder = "RotorGene Q CSV export"),
+          uiOutput("mqc_file_status")
+        ),
+        div(class = "lab-card",
+          div(class = "lab-card-title", span(class = "step-number", "2"), "Select Samples"),
+          div(class = "info-box", tags$span("\u2139", class = "info-icon"),
+            "Select 3\u201310 samples. Colours are assigned automatically from a qualitative palette."),
+          uiOutput("mqc_sample_select_ui")
+        ),
+        div(class = "lab-card",
+          div(class = "lab-card-title", span(class = "step-number", "3"), "Sample Labels"),
+          div(class = "info-box", tags$span("\u2139", class = "info-icon"),
+            "Optionally override the default sample names for cleaner plots."),
+          uiOutput("mqc_labels_ui")
+        ),
+        div(class = "lab-card",
+          div(class = "lab-card-title", span(class = "step-number", "4"), "Plot Settings"),
+          textInput("mqc_title", "Plot title", placeholder = "e.g. HsUCP1 Multi-Ligand QC"),
+          numericInput("mqc_linewidth", "Line width", value = 1.5, min = 0.5, max = 4, step = 0.25)
+        ),
+        div(class = "lab-card",
+          div(class = "lab-card-title", span(class = "step-number", "5"), "Generate"),
+          actionButton("mqc_run", "\u25b6  Generate QC Plots", class = "btn-run"), br(), br(),
+          uiOutput("mqc_download_buttons")
+        )
+      ),
+      column(8,
+        uiOutput("mqc_badges"),
+        div(class = "lab-card",
+          div(class = "lab-card-title", "\U0001f321\ufe0f  Raw Fluorescence"),
+          uiOutput("mqc_raw_placeholder"),
+          plotOutput("mqc_raw_plot", height = "300px")
+        ),
+        div(class = "lab-card",
+          div(class = "lab-card-title", "\U0001f4c8  dF/dT (unnormalised)"),
+          plotOutput("mqc_dfdt_plot", height = "300px")
+        ),
+        div(class = "lab-card",
+          div(class = "lab-card-title", "\U0001f4ca  Tm Comparison"),
+          plotOutput("mqc_tm_plot", height = "320px")
+        )
+      )
+    )
+    ) # end conditionalPanel multi
+
     )  # Close tagList
   ),
 
@@ -1336,7 +1452,9 @@ ui <- page_navbar(
             choices = c("Transparent" = "transparent", "White" = "white"),
             selected = "transparent"),
           br(),
-          downloadButton("gel_export", "📥 Download PNG", class = "btn-run"),
+          downloadButton("gel_export",      "\u2193 Download PNG",  class = "btn-download"),
+          " ",
+          downloadButton("gel_export_tiff", "\u2193 Download TIFF", class = "btn-download"),
           br(), br(),
           actionButton("gel_clear_markers", "🗑️ Clear All Markers", class = "btn-secondary")
         )
@@ -2199,9 +2317,105 @@ server <- function(input, output, session) {
       showNotification("✓ Image exported successfully!", type = "message", duration = 3)
     }
   )
-  
-  # ==========================================================================
-  # END GEL ANNOTATOR SERVER LOGIC
+
+  # Gel TIFF export — identical rendering, tiff() device instead of png()
+  output$gel_export_tiff <- downloadHandler(
+    filename = function() {
+      paste0("gel_labeled_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".tiff")
+    },
+    content = function(file) {
+      req(gel_data$image)
+      
+      ladder_markers <- isolate(gel_data$ladder_markers)
+      well_markers   <- isolate(gel_data$well_markers)
+      
+      scale_factor <- 0.75
+      img_width    <- gel_data$image_width  * scale_factor
+      img_height   <- gel_data$image_height * scale_factor
+      
+      ladder_offset <- input$gel_ladder_offset
+      well_offset   <- input$gel_well_offset
+      left_pad      <- if (nrow(ladder_markers) > 0) ladder_offset + 20 else 0
+      
+      if (nrow(well_markers) > 0) {
+        text_angle    <- as.numeric(input$gel_text_angle)
+        font_size     <- input$gel_fontsize
+        max_label_len <- max(nchar(well_markers$label))
+        if (text_angle == 45) {
+          char_width <- font_size * 0.6
+          top_pad    <- well_offset + 20 + max_label_len * char_width * sin(pi / 4)
+        } else if (text_angle == 90) {
+          char_width <- font_size * 0.6
+          top_pad    <- well_offset + 20 + (max_label_len * char_width * 0.5)
+        } else {
+          top_pad <- well_offset + 20
+        }
+      } else {
+        top_pad <- 0
+      }
+      
+      total_width  <- img_width  + left_pad
+      total_height <- img_height + top_pad
+      bg_color     <- if (input$gel_bg_color == "white") "white" else "transparent"
+      
+      # TIFF at 300 dpi for publication quality
+      tiff(file,
+           width      = total_width,
+           height     = total_height,
+           units      = "px",
+           bg         = bg_color,
+           res        = 300,
+           compression = "lzw")
+      
+      img_raster <- as.raster(gel_data$image)
+      par(mar = c(0, 0, 0, 0))
+      plot(1, type = "n", xlim = c(0, total_width), ylim = c(0, total_height),
+           xlab = "", ylab = "", axes = FALSE, asp = 1)
+      
+      if (input$gel_bg_color == "white")
+        rect(0, 0, total_width, total_height, col = "white", border = NA)
+      
+      rasterImage(img_raster, left_pad, 0, left_pad + img_width, img_height)
+      
+      if (nrow(ladder_markers) > 0) {
+        for (i in seq_len(nrow(ladder_markers))) {
+          marker <- ladder_markers[i, ]
+          y_pos  <- marker$y * scale_factor
+          x_label <- left_pad - 10
+          text(x_label, y_pos, paste0(marker$mw, " kDa"),
+               pos = 2, cex = input$gel_fontsize / 12,
+               font = if (input$gel_bold) 2 else 1)
+          segments(x_label + 5, y_pos, left_pad, y_pos, lwd = 1)
+        }
+      }
+      
+      if (nrow(well_markers) > 0) {
+        text_angle <- as.numeric(input$gel_text_angle)
+        for (i in seq_len(nrow(well_markers))) {
+          marker  <- well_markers[i, ]
+          x_pos   <- marker$x * scale_factor + left_pad
+          y_label <- img_height + 10
+          if (text_angle == 0) {
+            text(x_pos, y_label, marker$label,
+                 pos = 3, cex = input$gel_fontsize / 12,
+                 font = if (input$gel_bold) 2 else 1, srt = 0)
+          } else if (text_angle == 90) {
+            text(x_pos, y_label, marker$label,
+                 adj = c(0, 0.5), cex = input$gel_fontsize / 12,
+                 font = if (input$gel_bold) 2 else 1, srt = 90)
+          } else {
+            text(x_pos, y_label, marker$label,
+                 adj = c(0, 0), cex = input$gel_fontsize / 12,
+                 font = if (input$gel_bold) 2 else 1, srt = 45)
+          }
+          segments(x_pos, y_label - 5, x_pos, img_height, lwd = 1)
+        }
+      }
+      
+      dev.off()
+      showNotification("\u2713 TIFF exported successfully!", type = "message", duration = 3)
+    }
+  )
   
   # ===========================================================================
   # CPM CONTOUR PLOTTING SERVER LOGIC
@@ -4623,6 +4837,320 @@ server <- function(input, output, session) {
 
 
   # ==========================================================================
+  # CPM QC — MULTI-SAMPLE MODE
+  # ==========================================================================
+  # Qualitative palette for up to 10 samples (ColorBrewer Set1 + extra)
+  MQC_PALETTE <- c("#E41A1C","#377EB8","#4DAF4A","#FF7F00","#984EA3",
+                   "#A65628","#F781BF","#00CED1","#FFDB58","#555555")
+
+  mqc_data    <- reactiveVal(NULL)
+  mqc_results <- reactiveVal(NULL)
+
+  observeEvent(input$qc_clear, {
+    mqc_data(NULL)
+    mqc_results(NULL)
+    shinyjs::reset("mqc_file")
+  })
+
+  observeEvent(input$mqc_file, {
+    req(input$mqc_file)
+    mqc_results(NULL)
+    tryCatch({
+      d <- read_rotorgene_csv_full(input$mqc_file$datapath)
+      mqc_data(d)
+    }, error = function(e) mqc_data(list(error = conditionMessage(e))))
+  })
+
+  output$mqc_file_status <- renderUI({
+    req(mqc_data())
+    d <- mqc_data()
+    if (!is.null(d$error))
+      div(class = "status-pill error", div(class = "dot"), "Error loading file")
+    else {
+      n <- length(d$sample_ids)
+      div(class = "status-pill ready", div(class = "dot"),
+          sprintf("%d sample%s loaded", n, if (n != 1) "s" else ""))
+    }
+  })
+
+  mqc_sample_choices <- reactive({
+    req(mqc_data())
+    d <- mqc_data()
+    if (!is.null(d$error)) return(NULL)
+    setNames(d$sample_ids, paste0("[", d$sample_ids, "] ", d$sample_names))
+  })
+
+  output$mqc_sample_select_ui <- renderUI({
+    req(mqc_sample_choices())
+    ch  <- mqc_sample_choices()
+    # selected must be the VALUES (sample_ids), not the named vector
+    sel <- as.character(ch[seq_len(min(length(ch), 10))])
+    n_vis <- min(length(ch), 8)   # show up to 8 rows before scrolling
+    tagList(
+      tags$style(HTML("#mqc_samples { height: auto !important; }")),
+      selectInput("mqc_samples", NULL, choices = ch, selected = sel,
+                  multiple = TRUE, width = "100%",
+                  selectize = FALSE, size = n_vis)
+    )
+  })
+
+  output$mqc_labels_ui <- renderUI({
+    req(mqc_data())
+    d    <- mqc_data()
+    if (!is.null(d$error)) return(NULL)
+    # Fall back to all sample ids if nothing selected yet
+    sids <- if (!is.null(input$mqc_samples) && length(input$mqc_samples) > 0) {
+      input$mqc_samples
+    } else {
+      as.character(d$sample_ids[seq_len(min(length(d$sample_ids), 10))])
+    }
+    n    <- length(sids)
+    cols <- MQC_PALETTE[seq_len(n)]
+
+    rows <- lapply(seq_len(n), function(i) {
+      sid    <- sids[i]
+      idx    <- which(d$sample_ids == sid)[1]
+      dname  <- if (!is.na(idx)) d$sample_names[idx] else sid
+      fluidRow(style = "margin-bottom:4px;",
+        column(2,
+          div(style = sprintf(
+            "width:1.1rem;height:1.1rem;border-radius:50%%;background:%s;margin-top:0.5rem;", cols[i]))
+        ),
+        column(10,
+          textInput(paste0("mqc_lbl_", i), NULL,
+            placeholder = dname, width = "100%")
+        )
+      )
+    })
+    tagList(rows)
+  })
+
+  # ── Run multi-sample QC ───────────────────────────────────────────────────
+  observeEvent(input$mqc_run, {
+    req(mqc_data(), input$mqc_samples)
+    d    <- mqc_data()
+    sids <- input$mqc_samples
+    n    <- length(sids)
+
+    if (!is.null(d$error)) { showNotification(d$error, type = "error"); return() }
+    if (n < 2) { showNotification("Select at least 2 samples.", type = "warning"); return() }
+    if (n > 10) { showNotification("Maximum 10 samples.", type = "warning"); return() }
+
+    cols   <- MQC_PALETTE[seq_len(n)]
+    title  <- trimws(input$mqc_title)
+    lw     <- input$mqc_linewidth
+
+    # Resolve labels (use override if non-empty, else original sample name)
+    labels <- sapply(seq_len(n), function(i) {
+      ov  <- trimws(input[[paste0("mqc_lbl_", i)]])
+      idx <- which(d$sample_ids == sids[i])[1]
+      if (!is.null(ov) && nchar(ov) > 0) ov else d$sample_names[idx]
+    })
+
+    # Validate data matrices
+    idxs <- sapply(sids, function(s) which(d$sample_ids == s)[1])
+    if (any(is.na(idxs))) { showNotification("Could not locate all selected samples.", type = "error"); return() }
+    if (is.null(d$data) || ncol(d$data) < max(idxs)) {
+      showNotification("dF/dT data matrix too narrow. Check file format.", type = "error"); return()
+    }
+    if (is.null(d$raw_data) || ncol(d$raw_data) < max(idxs)) {
+      showNotification("Raw fluorescence block missing. Ensure this is a full RotorGene Q export.", type = "error", duration = 10); return()
+    }
+
+    pal <- setNames(cols, labels)
+
+    # ── Build combined data frames ────────────────────────────────────────
+    raw_df  <- do.call(rbind, lapply(seq_len(n), function(i) {
+      na.omit(data.frame(Temperature = d$raw_temperature,
+                         Value       = d$raw_data[, idxs[i]],
+                         Sample      = labels[i]))
+    }))
+    raw_df$Sample <- factor(raw_df$Sample, levels = labels)
+
+    dfdt_df <- do.call(rbind, lapply(seq_len(n), function(i) {
+      na.omit(data.frame(Temperature = d$temperature,
+                         Value       = d$data[, idxs[i]],
+                         Sample      = labels[i]))
+    }))
+    dfdt_df$Sample <- factor(dfdt_df$Sample, levels = labels)
+
+    # Auto Tm — peak of dF/dT for each sample
+    tms <- sapply(idxs, function(idx) {
+      dfdt <- d$data[, idx]
+      round(d$temperature[which.max(dfdt)], 2)
+    })
+    names(tms) <- labels
+
+    # ── Shared Prism theme (same as simple mode) ──────────────────────────
+    prism_theme <- function(base = 12, legend_pos = c(0.98, 0.98),
+                            legend_just = c(1, 1)) {
+      theme_classic(base_size = base) +
+      theme(
+        plot.title        = element_text(face = "bold", size = base + 2, hjust = 0),
+        axis.title        = element_text(face = "bold", size = base),
+        axis.text         = element_text(size = base - 1, colour = "black"),
+        axis.line         = element_line(colour = "black", linewidth = 0.7),
+        axis.ticks        = element_line(colour = "black", linewidth = 0.5),
+        axis.ticks.length = unit(0.18, "cm"),
+        legend.position   = legend_pos,
+        legend.justification = legend_just,
+        legend.background = element_rect(fill = NA, colour = NA),
+        legend.key        = element_rect(fill = NA, colour = NA),
+        legend.key.size   = unit(0.9, "lines"),
+        legend.text       = element_text(size = base - 1),
+        legend.title      = element_blank(),
+        panel.grid        = element_blank(),
+        plot.background   = element_rect(fill = "white", colour = NA),
+        panel.background  = element_rect(fill = "white", colour = NA),
+        plot.margin       = margin(12, 16, 10, 10)
+      )
+    }
+
+    # -- Plot 1: Raw Fluorescence ------------------------------------------
+    p_raw <- ggplot(raw_df, aes(x = Temperature, y = Value, colour = Sample)) +
+      geom_line(linewidth = lw) +
+      scale_colour_manual(values = pal) +
+      scale_x_continuous(limits = c(25, 90), breaks = seq(25, 90, 5), expand = c(0, 0)) +
+      scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20), expand = c(0, 0)) +
+      labs(title = if (nchar(title) > 0) paste(title, "FU") else NULL,
+           x = "Temperature (\u00b0C)", y = "Fluorescence (a.u.)") +
+      prism_theme()
+
+    # -- Plot 2: dF/dT --------------------------------------------------------
+    p_dfdt <- ggplot(dfdt_df, aes(x = Temperature, y = Value, colour = Sample)) +
+      geom_hline(yintercept = 0, colour = "grey60", linewidth = 0.4) +
+      geom_line(linewidth = lw) +
+      scale_colour_manual(values = pal) +
+      scale_x_continuous(limits = c(25.5, 89.5), breaks = seq(30, 85, 10), expand = c(0, 0)) +
+      scale_y_continuous(expand = expansion(mult = c(0.08, 0.12))) +
+      labs(title = if (nchar(title) > 0) paste(title, "dF/dT") else NULL,
+           x = "Temperature (\u00b0C)", y = "dF/dT") +
+      prism_theme()
+
+    # -- Plot 3: Tm bar chart (generalised to n samples) ----------------------
+    tm_df <- data.frame(
+      Sample = factor(labels, levels = labels),
+      Tm     = tms,
+      x_num  = seq_len(n),
+      Col    = cols,
+      stringsAsFactors = FALSE
+    )
+    bar_width <- max(0.25, min(0.5, 2.5 / n))  # narrower bars for more samples
+
+    p_tm <- ggplot(tm_df) +
+      geom_rect(aes(xmin = x_num - bar_width/2, xmax = x_num + bar_width/2,
+                    ymin = 25, ymax = Tm, fill = Sample),
+                colour = "black", linewidth = 0.5, show.legend = FALSE) +
+      geom_point(aes(x = x_num, y = Tm), size = 2, colour = "black", shape = 16) +
+      scale_fill_manual(values = pal) +
+      scale_x_continuous(breaks = seq_len(n), labels = labels,
+                         limits = c(0.4, n + 0.6), expand = c(0, 0)) +
+      scale_y_continuous(limits = c(25, 75), breaks = seq(25, 75, 10),
+                         expand = expansion(mult = c(0, 0.02))) +
+      labs(title = if (nchar(title) > 0) paste(title, "Tm") else NULL,
+           x = NULL, y = "T\u2098 (\u00b0C)") +
+      prism_theme(legend_pos = "none") +
+      theme(axis.text.x = element_text(angle = if (n > 4) 35 else 0,
+                                        hjust = if (n > 4) 1 else 0.5))
+
+    mqc_results(list(
+      p_raw  = p_raw,
+      p_dfdt = p_dfdt,
+      p_tm   = p_tm,
+      tms    = tms,
+      labels = labels,
+      title  = title,
+      n      = n
+    ))
+  })
+
+  # ── Badges ────────────────────────────────────────────────────────────────
+  output$mqc_badges <- renderUI({
+    req(mqc_results())
+    r   <- mqc_results()
+    cols <- MQC_PALETTE[seq_len(r$n)]
+    badge_cols <- lapply(seq_len(r$n), function(i) {
+      column(max(2, floor(12 / r$n)),
+        div(class = "result-badge",
+          div(class = "result-label",
+            div(style = sprintf("display:inline-block;width:0.6rem;height:0.6rem;border-radius:50%%;background:%s;margin-right:0.3rem;vertical-align:middle;", cols[i])),
+            r$labels[i]
+          ),
+          div(class = "result-value", style = "font-size:1.1rem;",
+            sprintf("%.2f\u00b0C", r$tms[i]))
+        )
+      )
+    })
+    do.call(fluidRow, badge_cols)
+  })
+
+  output$mqc_raw_placeholder <- renderUI({
+    if (is.null(mqc_results()))
+      div(class = "plot-placeholder", div(class = "icon", "\U0001f321\ufe0f"),
+          "Upload a file, select samples and click Generate QC Plots")
+  })
+
+  # ── Plot renderers ────────────────────────────────────────────────────────
+  dark_overlay_mqc <- function(p) {
+    p + theme(
+      plot.background  = element_rect(fill = "#0F1623", colour = NA),
+      panel.background = element_rect(fill = "#0F1623", colour = NA),
+      axis.line        = element_line(colour = "#7A8FAD"),
+      axis.ticks       = element_line(colour = "#7A8FAD"),
+      axis.text        = element_text(colour = "#7A8FAD"),
+      axis.title       = element_text(colour = "#E8F0FE"),
+      plot.title       = element_text(colour = "#E8F0FE"),
+      legend.text      = element_text(colour = "#E8F0FE"),
+      panel.grid       = element_blank()
+    )
+  }
+
+  output$mqc_raw_plot  <- renderPlot({ req(mqc_results()); dark_overlay_mqc(mqc_results()$p_raw)  }, bg = "#0F1623")
+  output$mqc_dfdt_plot <- renderPlot({ req(mqc_results()); dark_overlay_mqc(mqc_results()$p_dfdt) }, bg = "#0F1623")
+  output$mqc_tm_plot   <- renderPlot({ req(mqc_results()); dark_overlay_mqc(mqc_results()$p_tm)   }, bg = "#0F1623")
+
+  # ── Downloads ─────────────────────────────────────────────────────────────
+  output$mqc_download_buttons <- renderUI({
+    req(mqc_results())
+    tagList(
+      downloadButton("mqc_dl_raw",  "\u2193 PNG Fluorescence", class = "btn-download"), " ",
+      downloadButton("mqc_dl_dfdt", "\u2193 PNG dF/dT",        class = "btn-download"), " ",
+      downloadButton("mqc_dl_tm",   "\u2193 PNG Tm Chart",     class = "btn-download"), " ",
+      downloadButton("mqc_dl_csv",  "\u2193 CSV Summary",      class = "btn-download")
+    )
+  })
+
+  save_mqc_plot <- function(p, file, w = 6.5, h = 4.5) {
+    ggsave(file, p, width = w, height = h, dpi = 300, bg = "white")
+  }
+
+  output$mqc_dl_raw  <- downloadHandler(
+    filename = function() paste0("CPM_multiQC_fluorescence_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png"),
+    content  = function(f) save_mqc_plot(mqc_results()$p_raw,  f))
+  output$mqc_dl_dfdt <- downloadHandler(
+    filename = function() paste0("CPM_multiQC_dFdT_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png"),
+    content  = function(f) save_mqc_plot(mqc_results()$p_dfdt, f))
+  output$mqc_dl_tm   <- downloadHandler(
+    filename = function() paste0("CPM_multiQC_Tm_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png"),
+    content  = function(f) {
+      r <- mqc_results()
+      w <- max(4, 1.2 * r$n)   # wider chart for more samples
+      save_mqc_plot(r$p_tm, f, w = w, h = 5)
+    })
+  output$mqc_dl_csv  <- downloadHandler(
+    filename = function() paste0("CPM_multiQC_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+    content  = function(file) {
+      r <- mqc_results()
+      tms <- r$tms
+      write.csv(data.frame(
+        Label    = names(tms),
+        Tm_degC  = as.numeric(tms),
+        dTm_degC = as.numeric(tms) - as.numeric(tms[1]),
+        Date     = Sys.time()
+      ), file, row.names = FALSE)
+    })
+
+  # ==========================================================================
   # UCP1 Proton Conductance
   # ==========================================================================
   ucp1_cal_data <- reactiveVal(NULL)
@@ -5592,9 +6120,10 @@ server <- function(input, output, session) {
   # ==========================================================================
   # AKTA
   # ==========================================================================
-  akta_results  <- reactiveVal(NULL)
-  akta_raw_data <- reactiveVal(NULL)   # store parsed UV data for integration
-  akta_history  <- reactiveVal(list())
+  akta_results    <- reactiveVal(NULL)
+  akta_raw_data   <- reactiveVal(NULL)   # store parsed UV data for integration
+  akta_history    <- reactiveVal(list())
+  akta_annotation <- reactiveVal(NULL)   # stores integration result for plot annotation
 
   
   # Clear all ÄKTA data
@@ -5602,6 +6131,7 @@ server <- function(input, output, session) {
     akta_results(NULL)
     akta_raw_data(NULL)
     akta_history(list())
+    akta_annotation(NULL)
     shinyjs::reset("akta_files")
     shinyjs::reset("akta_custom_names")
     shinyjs::reset("akta_vol_min")
@@ -5721,7 +6251,22 @@ server <- function(input, output, session) {
 
   output$akta_plot <- renderPlot({
     req(akta_results())
-    p <- akta_results()$plot
+    p   <- akta_results()$plot
+    ann <- akta_annotation()
+
+    # Add annotation layer if user has pressed "Add to Plot"
+    if (!is.null(ann)) {
+      lbl <- sprintf("Ve = %.2f mL\n%.1f kDa", ann$centroid, ann$mw_kda)
+      p <- p +
+        geom_vline(xintercept = ann$centroid,
+                   colour = "#FF7B47", linewidth = 0.7, linetype = "dashed") +
+        annotate("label",
+                 x = ann$centroid, y = Inf,
+                 label = lbl, vjust = 1.3, size = 3.5,
+                 colour = "#FF7B47", fill = "#0F1623",
+                 label.size = 0.3, label.padding = unit(0.25, "lines"))
+    }
+
     p + theme(
       plot.background  = element_rect(fill = "#0F1623", colour = NA),
       panel.background = element_rect(fill = "#0F1623", colour = NA),
@@ -5740,26 +6285,26 @@ server <- function(input, output, session) {
   }, bg = "#0F1623")
 
   # ---- Peak Integration -----------------------------------------------------
-  output$akta_integration_result <- renderUI({
+  # ---- Peak Integration -------------------------------------------------------
+
+  # Core reactive — parses UV, integrates, computes centroid + MW
+  # Single source of truth used by display, actions, export, and annotation
+  akta_integration <- reactive({
     req(input$akta_files)
     v_start <- input$akta_int_start
     v_end   <- input$akta_int_end
-    if (is.na(v_start) || is.na(v_end) || v_start >= v_end)
-      return(NULL)
+    if (is.na(v_start) || is.na(v_end) || v_start >= v_end) return(NULL)
+
+    void_vol  <- if (is.na(input$akta_void_vol))  8.23  else input$akta_void_vol
+    total_vol <- if (is.na(input$akta_total_vol)) 24.00 else input$akta_total_vol
 
     tryCatch({
-      # Read first uploaded file directly
-      fp <- input$akta_files$datapath[1]
-
-      # Use internal reader from plot_akta_improved environment
-      # We call the same read_unicorn_csv logic inline
-      raw <- utils::read.delim(fp, header = FALSE, sep = "\t",
-        fileEncoding = "UTF-16LE", stringsAsFactors = FALSE, check.names = FALSE)
-      mat    <- as.matrix(raw)
-      aktlst <- t(mat)
+      fp     <- input$akta_files$datapath[1]
+      raw    <- utils::read.delim(fp, header = FALSE, sep = "\t",
+                  fileEncoding = "UTF-16LE", stringsAsFactors = FALSE, check.names = FALSE)
+      aktlst <- t(as.matrix(raw))
       n_rows <- nrow(aktlst); n_cols <- ncol(aktlst)
 
-      # Extract UV trace
       uv_df <- NULL
       for (r in seq_len(n_rows)) {
         lbl <- trimws(as.character(aktlst[r, 2]))
@@ -5772,48 +6317,162 @@ server <- function(input, output, session) {
           if (m > 0) { uv_df <- data.frame(vol = x_v[1:m], uv = y_v[1:m]); break }
         }
       }
-      if (is.null(uv_df)) return(div(class = "warn-box", "Could not read UV trace for integration."))
+      if (is.null(uv_df)) return(list(error = "Could not read UV trace for integration."))
 
-      # Integrate within bounds using trapezoidal rule
       roi   <- uv_df[uv_df$vol >= v_start & uv_df$vol <= v_end, ]
       total <- uv_df[uv_df$uv >= 0, ]
-      if (nrow(roi) < 2) return(div(class = "warn-box", "Not enough points in integration range."))
+      if (nrow(roi) < 2) return(list(error = "Not enough data points in integration range."))
 
+      # Trapezoidal area + purity
       area_roi   <- sum(diff(roi$vol) * (head(roi$uv, -1) + tail(roi$uv, -1))) / 2
       area_total <- sum(diff(total$vol) * (head(total$uv, -1) + tail(total$uv, -1))) / 2
       purity     <- if (area_total > 0) 100 * area_roi / area_total else NA
 
-      div(
-        div(class = "status-pill ready", style = "margin-bottom:0.4rem;",
-          div(class = "dot"),
-          sprintf("Area: %.1f  |  Purity: %.1f%%", area_roi, purity)
-        ),
-        div(style = "font-size:0.72rem;color:var(--muted);",
-          sprintf("Integration: %.1f – %.1f mL  (%d points)",
-            v_start, v_end, nrow(roi)))
+      # Centroid elution volume — UV-signal-weighted mean (same logic as CPM Tm centroid)
+      uv_pos   <- pmax(roi$uv, 0)
+      centroid <- if (sum(uv_pos) > 0) sum(roi$vol * uv_pos) / sum(uv_pos) else mean(c(v_start, v_end))
+
+      # MW from SEC calibration formula (from column calibration Excel)
+      norm_ve <- (centroid - void_vol) / (total_vol - void_vol)
+      mw_da   <- 10 ^ (-3.22448969353114 * norm_ve + 5.92750021160459)
+
+      list(
+        error     = NULL,
+        area      = area_roi,
+        purity    = purity,
+        centroid  = centroid,
+        mw_da     = mw_da,
+        mw_kda    = mw_da / 1000,
+        v_start   = v_start,
+        v_end     = v_end,
+        n_points  = nrow(roi),
+        void_vol  = void_vol,
+        total_vol = total_vol
       )
-    }, error = function(e) {
-      div(class = "warn-box", paste("Integration error:", conditionMessage(e)))
-    })
+    }, error = function(e) list(error = conditionMessage(e)))
   })
+
+  # Results display — four badges
+  output$akta_integration_result <- renderUI({
+    res <- akta_integration()
+    if (is.null(res)) return(NULL)
+    if (!is.null(res$error))
+      return(div(class = "warn-box", res$error))
+
+    tagList(
+      fluidRow(
+        column(6,
+          div(class = "result-badge",
+            div(class = "result-label", "Peak Area"),
+            div(class = "result-value", sprintf("%.1f", res$area))
+          )
+        ),
+        column(6,
+          div(class = "result-badge",
+            div(class = "result-label", "Purity"),
+            div(class = "result-value green", sprintf("%.1f%%", res$purity))
+          )
+        )
+      ),
+      fluidRow(
+        column(6,
+          div(class = "result-badge",
+            div(class = "result-label", "Elution Volume"),
+            div(class = "result-value orange", sprintf("%.2f mL", res$centroid))
+          )
+        ),
+        column(6,
+          div(class = "result-badge",
+            div(class = "result-label", "Est. MW"),
+            div(class = "result-value purple", sprintf("%.1f kDa", res$mw_kda))
+          )
+        )
+      ),
+      div(style = "font-size:0.72rem;color:var(--muted);margin-top:0.3rem;",
+        sprintf("Range: %.1f\u2013%.1f mL  (%d points)", res$v_start, res$v_end, res$n_points))
+    )
+  })
+
+  # Action buttons — only shown when valid results exist
+  output$akta_integration_actions <- renderUI({
+    res <- akta_integration()
+    if (is.null(res) || !is.null(res$error)) return(NULL)
+    tagList(
+      actionButton("akta_annotate_plot", "\U1F4CC  Add to Plot", class = "btn-run",
+        style = "font-size:0.78rem;padding:0.45rem 0.9rem;width:auto;"),
+      " ",
+      downloadButton("akta_int_csv", "\u2193 Export Table", class = "btn-download")
+    )
+  })
+
+  # Annotate button — snapshot current integration result into annotation state
+  observeEvent(input$akta_annotate_plot, {
+    res <- akta_integration()
+    if (!is.null(res) && is.null(res$error)) {
+      akta_annotation(res)
+      showNotification(
+        "\u2713 Annotation set — regenerate the plot to see it on the chromatogram.",
+        type = "message", duration = 4)
+    }
+  })
+
+  # Integration CSV export
+  output$akta_int_csv <- downloadHandler(
+    filename = function() paste0("AKTA_integration_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+    content  = function(file) {
+      res      <- akta_integration()
+      req(!is.null(res) && is.null(res$error))
+      run_name <- if (!is.null(input$akta_files)) input$akta_files$name[1] else "unknown"
+      write.csv(data.frame(
+        Run            = run_name,
+        Range_start_mL = res$v_start,
+        Range_end_mL   = res$v_end,
+        Peak_area      = round(res$area,     3),
+        Purity_pct     = round(res$purity,   2),
+        Elution_vol_mL = round(res$centroid, 3),
+        MW_kDa         = round(res$mw_kda,   2),
+        MW_Da          = round(res$mw_da,    0),
+        Void_vol_mL    = res$void_vol,
+        Total_vol_mL   = res$total_vol,
+        Date           = format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+      ), file, row.names = FALSE)
+      showNotification("\u2713 Integration table exported!", type = "message", duration = 3)
+    }
+  )
 
   # ---- AKTA Downloads -------------------------------------------------------
   output$akta_download_buttons <- renderUI({
     req(akta_results())
     tagList(
-      downloadButton("akta_dl_png", "\u2193 PNG Plot", class = "btn-download"), " ",
-      downloadButton("akta_dl_pdf", "\u2193 PDF Plot", class = "btn-download")
+      downloadButton("akta_dl_png", "\u2193 PNG Plot",       class = "btn-download"), " ",
+      downloadButton("akta_dl_pdf", "\u2193 PDF Plot",       class = "btn-download"), " ",
+      downloadButton("akta_dl_csv", "\u2193 CSV Trace Data", class = "btn-download")
     )
   })
 
   dl_akta_plot <- function(file, device, bg) {
     req(akta_results())
-    p <- akta_results()$plot + theme(
-      plot.background  = element_rect(fill = "white", colour = NA),
-      panel.background = element_rect(fill = "white", colour = NA),
-      text             = element_text(colour = "black"),
-      axis.text        = element_text(colour = "black"),
-      panel.grid.major = element_line(colour = "grey90"),
+    p   <- akta_results()$plot
+    ann <- akta_annotation()
+
+    if (!is.null(ann)) {
+      lbl <- sprintf("Ve = %.2f mL\n%.1f kDa", ann$centroid, ann$mw_kda)
+      p <- p +
+        geom_vline(xintercept = ann$centroid,
+                   colour = "#E07030", linewidth = 0.7, linetype = "dashed") +
+        annotate("label",
+                 x = ann$centroid, y = Inf,
+                 label = lbl, vjust = 1.3, size = 3.5,
+                 colour = "#E07030", fill = "white",
+                 label.size = 0.3, label.padding = unit(0.25, "lines"))
+    }
+
+    p <- p + theme(
+      plot.background   = element_rect(fill = "white", colour = NA),
+      panel.background  = element_rect(fill = "white", colour = NA),
+      text              = element_text(colour = "black"),
+      axis.text         = element_text(colour = "black"),
+      panel.grid.major  = element_line(colour = "grey90"),
       legend.background = element_rect(fill = "white"))
     ggsave(file, p, width = 12, height = 6, dpi = 300, device = device, bg = bg)
   }
@@ -5824,6 +6483,62 @@ server <- function(input, output, session) {
   output$akta_dl_pdf <- downloadHandler(
     filename = function() paste0("AKTA_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".pdf"),
     content  = function(f) dl_akta_plot(f, "pdf", NULL))
+
+  # CSV export: UV 280 trace for every uploaded file as a wide table
+  output$akta_dl_csv <- downloadHandler(
+    filename = function() paste0("AKTA_traces_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+    content  = function(file) {
+      req(akta_results())
+      req(input$akta_files)
+      
+      files     <- input$akta_files$datapath
+      run_names <- tools::file_path_sans_ext(input$akta_files$name)
+      
+      # Parse UV 280 trace from each file using same inline logic as integration
+      traces <- lapply(seq_along(files), function(i) {
+        tryCatch({
+          raw    <- utils::read.delim(files[i], header = FALSE, sep = "\t",
+                     fileEncoding = "UTF-16LE", stringsAsFactors = FALSE, check.names = FALSE)
+          aktlst <- t(as.matrix(raw))
+          n_rows <- nrow(aktlst); n_cols <- ncol(aktlst)
+          
+          for (r in seq_len(n_rows)) {
+            lbl <- trimws(as.character(aktlst[r, 2]))
+            if (is.na(lbl) || lbl == "") next
+            if (lbl %in% c("UV 1_280", "UV")) {
+              x_v <- suppressWarnings(as.numeric(aktlst[r,     4:n_cols]))
+              y_v <- suppressWarnings(as.numeric(aktlst[r + 1, 4:n_cols]))
+              x_v <- x_v[!is.na(x_v)]; y_v <- y_v[!is.na(y_v)]
+              m   <- min(length(x_v), length(y_v))
+              if (m > 0) return(data.frame(vol = x_v[1:m], uv = y_v[1:m]))
+            }
+          }
+          NULL
+        }, error = function(e) NULL)
+      })
+      
+      # Merge all traces on Volume using a common grid (nearest-neighbour join)
+      valid   <- Filter(Negate(is.null), traces)
+      vnames  <- run_names[!sapply(traces, is.null)]
+      
+      if (length(valid) == 0) {
+        write.csv(data.frame(Error = "No UV traces could be parsed"), file, row.names = FALSE)
+        return()
+      }
+      
+      # Use the volume axis of the first run as reference; interpolate others onto it
+      ref_vol <- valid[[1]]$vol
+      out     <- data.frame(Volume_mL = ref_vol)
+      
+      for (i in seq_along(valid)) {
+        uv_interp <- approx(valid[[i]]$vol, valid[[i]]$uv, xout = ref_vol, rule = 2)$y
+        out[[paste0("UV280_", vnames[i])]] <- round(uv_interp, 4)
+      }
+      
+      write.csv(out, file, row.names = FALSE)
+      showNotification("\u2713 Trace data exported!", type = "message", duration = 3)
+    }
+  )
 
   # ---- AKTA History ---------------------------------------------------------
   output$akta_history_ui <- renderUI({
