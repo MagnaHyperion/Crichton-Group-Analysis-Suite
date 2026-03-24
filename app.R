@@ -2785,7 +2785,7 @@ server <- function(input, output, session) {
     processed <- contour_data$dfdt_processed
     
     # Reshape normalized values to long format, applying threshold + rescale
-    thr <- isolate(input$contour_threshold)
+    thr <- input$contour_threshold
     df_long <- data.frame(
       Temperature = rep(processed$temperatures, times = length(processed$sample_names)),
       Sample      = rep(processed$sample_names, each  = length(processed$temperatures)),
@@ -2812,6 +2812,8 @@ server <- function(input, output, session) {
         limits  = c(0, 1),
         name    = "Norm.\ndF/dT"
       ) +
+      scale_x_discrete(expand = c(0, 0)) +
+      scale_y_continuous(expand = c(0, 0)) +
       labs(
         x     = NULL,
         y     = "Temperature (\u00b0C)"
@@ -2827,7 +2829,8 @@ server <- function(input, output, session) {
         legend.background = element_rect(fill = "#0B1623", colour = NA),
         legend.text      = element_text(colour = "#7A8FAD", size = 8),
         legend.title     = element_text(colour = "#7A8FAD", size = 9),
-        panel.grid       = element_blank()
+        panel.grid       = element_blank(),
+        panel.border     = element_rect(colour = "#7A8FAD", fill = NA, linewidth = 0.6)
       )
     
   }, bg = "#0B1623")
@@ -3076,6 +3079,8 @@ server <- function(input, output, session) {
       p <- ggplot(df_long, aes(x = Sample, y = Temperature, fill = Norm_dFdT)) +
         geom_tile() +
         scale_fill_gradientn(colours = pal, limits = c(0, 1), name = "Norm.\ndF/dT") +
+        scale_x_discrete(expand = c(0, 0)) +
+        scale_y_continuous(expand = c(0, 0)) +
         labs(x = NULL, y = "Temperature (\u00b0C)") +
         theme_minimal(base_size = 12) +
         theme(
@@ -3085,7 +3090,8 @@ server <- function(input, output, session) {
           axis.text.x      = element_text(angle = 40, hjust = 1, size = 10),
           axis.text.y      = element_text(size = 10),
           axis.title.y     = element_text(size = 11),
-          panel.grid       = element_blank()
+          panel.grid       = element_blank(),
+          panel.border     = element_rect(colour = "black", fill = NA, linewidth = 0.6)
         )
 
       ggsave(file, p, width = 10, height = 7, dpi = 300, bg = "white")
@@ -3127,7 +3133,7 @@ server <- function(input, output, session) {
       p <- ggplot() +
         geom_tile(data = tile_df,
                   aes(x = log_x, y = Temperature, fill = norm_dFdT),
-                  width = tile_w, height = temp_step, alpha = 0.65) +
+                  width = tile_w, height = temp_step) +
         scale_fill_gradientn(colours = pal, limits = c(0, 1), name = "Norm.\ndF/dT") +
         geom_line(data = df_tm, aes(x = log_x, y = Mean),
                   colour = "black", linewidth = 0.9, inherit.aes = FALSE) +
@@ -4075,53 +4081,67 @@ server <- function(input, output, session) {
     filename = function() paste0("BCA_results_table_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png"),
     content  = function(file) {
       req(bca_results())
-      r <- bca_results()
+      r     <- bca_results()
+      title <- if (nchar(trimws(input$bca_title)) > 0) trimws(input$bca_title) else "BCA Assay Protein Yield Summary"
 
-      # Build a clean ggplot table image using annotation_custom + tableGrob
-      # so there is no webshot/Chrome dependency
+      params <- c("Concentration (mg/mL)",
+                  "Sample volume (mL)",
+                  "Total yield (mg)",
+                  "R\u00b2 (standard curve)")
+      vals   <- c(sprintf("%.2f",  r$conc),
+                  sprintf("%.2f",  r$vol),
+                  sprintf("%.2f",  r$yield),
+                  sprintf("%.4f",  r$curve$r2))
 
-      fmt <- "%.2f"
-      df  <- data.frame(
-        Parameter = c("Concentration (mg/mL)",
-                      "Sample Volume (mL)",
-                      "Total Yield (mg)",
-                      "R\u00b2 (Standard Curve)"),
-        Value     = c(sprintf(fmt, r$conc),
-                      sprintf(fmt, r$vol),
-                      sprintf(fmt, r$yield),
-                      sprintf("%.4f", r$curve$r2))
-      )
+      n      <- length(params)
+      # y positions: rows evenly spaced, header above
+      row_h  <- 1.0   # every row (header and data) occupies exactly this height
+      # Row positions bottom-up: 0 = bottom data row, n-1 = top data row, n = header row
+      ys     <- seq(n - 1, 0, by = -1) * row_h   # data row baselines
+      y_hdr  <- n * row_h                          # header row baseline
+      y_rule <- y_hdr + row_h                      # thick rule (between title and header)
+      y_ttl  <- y_rule + 0.35                      # title text
 
-      # Style the table grob
-      tbl_theme <- gridExtra::ttheme_minimal(
-        core    = list(fg_params  = list(fontsize = 13, fontfamily = "mono"),
-                       bg_params  = list(fill = c("white", "#F5F8FF"), col = "grey85")),
-        colhead = list(fg_params  = list(fontsize = 12, fontface = "bold", fontfamily = "sans",
-                                         col = "grey20"),
-                       bg_params  = list(fill = "#0072B2", col = NA),
-                       fg_params2 = list(col = "white"))
-      )
-      tbl_grob <- gridExtra::tableGrob(df, rows = NULL, theme = tbl_theme)
+      # Everything uses the same offsets: text at baseline+0.65, separator at baseline
+      text_top <- 0.65
 
-      # Wrap in a ggplot for clean margins and title
+      df_rows <- data.frame(y = ys, param = params, val = vals)
+
       p <- ggplot() +
-        annotation_custom(tbl_grob,
-          xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf) +
-        labs(title    = "BCA Assay - Protein Yield Summary",
-             subtitle = sprintf("File: %s  |  %s",
-               if (!is.null(input$bca_file)) input$bca_file$name else "unknown",
-               format(Sys.time(), "%Y-%m-%d %H:%M"))) +
+        # ---- title ----
+        annotate("text", x = 0, y = y_ttl,
+                 label = title, hjust = 0, vjust = 0,
+                 size = 4.5, fontface = "bold", colour = "black", family = "sans") +
+        # ---- thick rule (under title, above header) ----
+        annotate("segment", x = 0, xend = 1, y = y_rule, yend = y_rule,
+                 colour = "black", linewidth = 0.9) +
+        # ---- header labels ----
+        annotate("text", x = 0, y = y_hdr + text_top,
+                 label = "PARAMETER", hjust = 0, vjust = 1,
+                 size = 2.9, colour = "grey45", family = "sans") +
+        annotate("text", x = 1, y = y_hdr + text_top,
+                 label = "VALUE", hjust = 1, vjust = 1,
+                 size = 2.9, colour = "grey45", family = "sans") +
+        # ---- thin rule below header (at header baseline) ----
+        annotate("segment", x = 0, xend = 1, y = y_hdr, yend = y_hdr,
+                 colour = "grey65", linewidth = 0.4) +
+        # ---- data rows: text at top of band, separator at baseline ----
+        geom_text(data = df_rows, aes(x = 0, y = y + text_top, label = param),
+                  hjust = 0, vjust = 1, size = 3.3,
+                  colour = "black", family = "sans") +
+        geom_text(data = df_rows, aes(x = 1, y = y + text_top, label = val),
+                  hjust = 1, vjust = 1, size = 3.3, fontface = "bold",
+                  colour = "black", family = "mono") +
+        geom_segment(data = df_rows, aes(x = 0, xend = 1, y = y, yend = y),
+                     colour = "grey88", linewidth = 0.35) +
+        # ---- tight axis limits ----
+        scale_x_continuous(limits = c(-0.02, 1.02), expand = c(0, 0)) +
+        scale_y_continuous(limits = c(-0.05, y_ttl + 0.5), expand = c(0, 0)) +
         theme_void() +
-        theme(
-          plot.title    = element_text(size = 15, face = "bold", hjust = 0.5,
-                            margin = margin(b = 6, t = 12)),
-          plot.subtitle = element_text(size = 10, hjust = 0.5, colour = "grey40",
-                            margin = margin(b = 12)),
-          plot.margin   = margin(20, 30, 20, 30),
-          plot.background = element_rect(fill = "white", colour = NA)
-        )
+        theme(plot.background = element_rect(fill = "white", colour = NA),
+              plot.margin     = margin(16, 24, 16, 24))
 
-      ggsave(file, p, width = 7, height = 3.5, dpi = 300, bg = "white")
+      ggsave(file, p, width = 5.5, height = 2.8 + n * 0.05, dpi = 300, bg = "white")
     }
   )
   output$bca_dl_csv <- downloadHandler(
@@ -6144,6 +6164,50 @@ server <- function(input, output, session) {
   akta_history    <- reactiveVal(list())
   akta_annotation <- reactiveVal(NULL)   # stores integration result for plot annotation
 
+  # Format-aware UV trace extractor used by integration and CSV export.
+  # Handles both UTF-16LE matrix format and UTF-8 columnar format.
+  # Returns data.frame(vol, uv) or NULL on failure.
+  parse_akta_uv_trace <- function(fp) {
+    tryCatch({
+      # Detect format by checking row 2 for known columnar trace-type labels
+      first_lines <- readLines(fp, n = 3, encoding = "UTF-8", warn = FALSE)
+      is_columnar <- length(first_lines) >= 2 &&
+                     grepl("UV|Fraction|Cond", first_lines[2], ignore.case = FALSE)
+
+      if (is_columnar) {
+        raw         <- utils::read.csv(fp, header = FALSE, stringsAsFactors = FALSE,
+                          check.names = FALSE, fileEncoding = "UTF-8-BOM", na.strings = "")
+        trace_types <- trimws(as.character(raw[2, ]))
+        data_rows   <- raw[4:nrow(raw), ]
+        uv_col      <- which(trace_types == "UV")[1]
+        if (is.na(uv_col)) return(NULL)
+        vols <- suppressWarnings(as.numeric(as.character(data_rows[[uv_col]])))
+        uvs  <- suppressWarnings(as.numeric(as.character(data_rows[[uv_col + 1]])))
+        ok   <- !is.na(vols) & !is.na(uvs)
+        if (sum(ok) == 0) return(NULL)
+        return(data.frame(vol = vols[ok], uv = uvs[ok]))
+      }
+
+      # Original matrix format (UTF-16LE tab-separated)
+      raw    <- utils::read.delim(fp, header = FALSE, sep = "\t",
+                  fileEncoding = "UTF-16LE", stringsAsFactors = FALSE, check.names = FALSE)
+      aktlst <- t(as.matrix(raw))
+      n_rows <- nrow(aktlst); n_cols <- ncol(aktlst)
+      for (r in seq_len(n_rows)) {
+        lbl <- trimws(as.character(aktlst[r, 2]))
+        if (is.na(lbl) || lbl == "") next
+        if (lbl %in% c("UV 1_280", "UV")) {
+          x_v <- suppressWarnings(as.numeric(aktlst[r,     4:n_cols]))
+          y_v <- suppressWarnings(as.numeric(aktlst[r + 1, 4:n_cols]))
+          x_v <- x_v[!is.na(x_v)]; y_v <- y_v[!is.na(y_v)]
+          m   <- min(length(x_v), length(y_v))
+          if (m > 0) return(data.frame(vol = x_v[1:m], uv = y_v[1:m]))
+        }
+      }
+      NULL
+    }, error = function(e) NULL)
+  }
+
   
   # Clear all ÄKTA data
   observeEvent(input$akta_clear, {
@@ -6318,24 +6382,8 @@ server <- function(input, output, session) {
     total_vol <- if (is.na(input$akta_total_vol)) 24.00 else input$akta_total_vol
 
     tryCatch({
-      fp     <- input$akta_files$datapath[1]
-      raw    <- utils::read.delim(fp, header = FALSE, sep = "\t",
-                  fileEncoding = "UTF-16LE", stringsAsFactors = FALSE, check.names = FALSE)
-      aktlst <- t(as.matrix(raw))
-      n_rows <- nrow(aktlst); n_cols <- ncol(aktlst)
-
-      uv_df <- NULL
-      for (r in seq_len(n_rows)) {
-        lbl <- trimws(as.character(aktlst[r, 2]))
-        if (is.na(lbl) || lbl == "") next
-        if (lbl %in% c("UV 1_280", "UV")) {
-          x_v <- suppressWarnings(as.numeric(aktlst[r,     4:n_cols]))
-          y_v <- suppressWarnings(as.numeric(aktlst[r + 1, 4:n_cols]))
-          x_v <- x_v[!is.na(x_v)]; y_v <- y_v[!is.na(y_v)]
-          m   <- min(length(x_v), length(y_v))
-          if (m > 0) { uv_df <- data.frame(vol = x_v[1:m], uv = y_v[1:m]); break }
-        }
-      }
+      fp    <- input$akta_files$datapath[1]
+      uv_df <- parse_akta_uv_trace(fp)
       if (is.null(uv_df)) return(list(error = "Could not read UV trace for integration."))
 
       roi   <- uv_df[uv_df$vol >= v_start & uv_df$vol <= v_end, ]
@@ -6513,27 +6561,9 @@ server <- function(input, output, session) {
       files     <- input$akta_files$datapath
       run_names <- tools::file_path_sans_ext(input$akta_files$name)
       
-      # Parse UV 280 trace from each file using same inline logic as integration
+      # Parse UV 280 trace from each file — handles both UNICORN 7 export formats
       traces <- lapply(seq_along(files), function(i) {
-        tryCatch({
-          raw    <- utils::read.delim(files[i], header = FALSE, sep = "\t",
-                     fileEncoding = "UTF-16LE", stringsAsFactors = FALSE, check.names = FALSE)
-          aktlst <- t(as.matrix(raw))
-          n_rows <- nrow(aktlst); n_cols <- ncol(aktlst)
-          
-          for (r in seq_len(n_rows)) {
-            lbl <- trimws(as.character(aktlst[r, 2]))
-            if (is.na(lbl) || lbl == "") next
-            if (lbl %in% c("UV 1_280", "UV")) {
-              x_v <- suppressWarnings(as.numeric(aktlst[r,     4:n_cols]))
-              y_v <- suppressWarnings(as.numeric(aktlst[r + 1, 4:n_cols]))
-              x_v <- x_v[!is.na(x_v)]; y_v <- y_v[!is.na(y_v)]
-              m   <- min(length(x_v), length(y_v))
-              if (m > 0) return(data.frame(vol = x_v[1:m], uv = y_v[1:m]))
-            }
-          }
-          NULL
-        }, error = function(e) NULL)
+        parse_akta_uv_trace(files[i])
       })
       
       # Merge all traces on Volume using a common grid (nearest-neighbour join)
@@ -6605,26 +6635,40 @@ server <- function(input, output, session) {
         # Results table image
         if (!is.null(r$gt)) {
           tryCatch({
-            df_tbl <- data.frame(
-              Parameter = c("Concentration (mg/mL)", "Sample Volume (mL)",
-                            "Total Yield (mg)", "R\u00b2"),
-              Value     = c(sprintf("%.2f", r$conc), sprintf("%.2f", r$vol),
-                            sprintf("%.2f", r$yield), sprintf("%.4f", r$curve$r2))
-            )
-            tg <- gridExtra::tableGrob(df_tbl, rows = NULL,
-              theme = gridExtra::ttheme_minimal(
-                core    = list(fg_params = list(fontsize = 12),
-                               bg_params = list(fill = c("white","#F5F8FF"), col = "grey85")),
-                colhead = list(fg_params = list(fontface = "bold"),
-                               bg_params = list(fill = "#0072B2", col = NA))
-              ))
+            zip_title <- if (nchar(trimws(input$bca_title)) > 0) trimws(input$bca_title) else "BCA Assay Protein Yield Summary"
+            zip_params <- c("Concentration (mg/mL)", "Sample volume (mL)", "Total yield (mg)", "R\u00b2 (standard curve)")
+            zip_vals   <- c(sprintf("%.2f", r$conc), sprintf("%.2f", r$vol), sprintf("%.2f", r$yield), sprintf("%.4f", r$curve$r2))
+            n_zip      <- length(zip_params)
+            rh         <- 1.0
+            ys_zip     <- seq(n_zip - 1, 0, by = -1) * rh
+            y_hdr_zip  <- n_zip * rh
+            y_rule_zip <- y_hdr_zip + rh
+            y_ttl_zip  <- y_rule_zip + 0.35
+            tt         <- 0.65
+            df_zip     <- data.frame(y = ys_zip, param = zip_params, val = zip_vals)
             p_tbl <- ggplot() +
-              annotation_custom(tg, xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=Inf) +
-              labs(title = "BCA Assay - Protein Yield Summary") +
+              annotate("text", x = 0, y = y_ttl_zip, label = zip_title,
+                       hjust = 0, vjust = 0, size = 4.5, fontface = "bold", colour = "black") +
+              annotate("segment", x = 0, xend = 1, y = y_rule_zip, yend = y_rule_zip,
+                       colour = "black", linewidth = 0.9) +
+              annotate("text", x = 0, y = y_hdr_zip + tt, label = "PARAMETER",
+                       hjust = 0, vjust = 1, size = 2.9, colour = "grey45") +
+              annotate("text", x = 1, y = y_hdr_zip + tt, label = "VALUE",
+                       hjust = 1, vjust = 1, size = 2.9, colour = "grey45") +
+              annotate("segment", x = 0, xend = 1, y = y_hdr_zip, yend = y_hdr_zip,
+                       colour = "grey65", linewidth = 0.4) +
+              geom_text(data = df_zip, aes(x = 0, y = y + tt, label = param),
+                        hjust = 0, vjust = 1, size = 3.3, colour = "black") +
+              geom_text(data = df_zip, aes(x = 1, y = y + tt, label = val),
+                        hjust = 1, vjust = 1, size = 3.3, fontface = "bold",
+                        colour = "black", family = "mono") +
+              geom_segment(data = df_zip, aes(x = 0, xend = 1, y = y, yend = y),
+                           colour = "grey88", linewidth = 0.35) +
+              scale_x_continuous(limits = c(-0.02, 1.02), expand = c(0, 0)) +
+              scale_y_continuous(limits = c(-0.05, y_ttl_zip + 0.5), expand = c(0, 0)) +
               theme_void() +
-              theme(plot.title = element_text(size=14, face="bold", hjust=0.5, margin=margin(b=8,t=10)),
-                    plot.margin = margin(20,30,20,30),
-                    plot.background = element_rect(fill="white", colour=NA))
+              theme(plot.background = element_rect(fill = "white", colour = NA),
+                    plot.margin = margin(16, 24, 16, 24))
             bca_tbl_png <- file.path(tmp, "BCA_results_table.png")
             ggsave(bca_tbl_png, p_tbl, width=7, height=3.5, dpi=300, bg="white")
             files_to_zip <- c(files_to_zip, bca_tbl_png)

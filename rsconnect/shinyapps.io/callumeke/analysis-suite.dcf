@@ -5,6 +5,6 @@ account: callumeke
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16908122
-bundleId: 11731803
+bundleId: 11753598
 url: https://callumeke.shinyapps.io/analysis-suite/
 version: 1
