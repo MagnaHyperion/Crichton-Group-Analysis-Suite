@@ -225,6 +225,12 @@ read_softmax_bca <- function(file_path) {
     names(df) <- header[seq_len(ncol(df))]
     
     # Fill down sample and concentration columns
+    # Replace whitespace-only cells with NA so tidyr::fill propagates correctly.
+    # Some SoftMax exports use " " (a space) instead of "" in blank cells,
+    # which prevents fill-down from working on concentration/sample columns.
+    df <- df |>
+      mutate(across(where(is.character), ~ if_else(trimws(.x) == "", NA_character_, .x)))
+
     fill_cols <- intersect(c("sample", "conc", "backcalcconc", "back_calc_conc"), names(df))
     if (length(fill_cols)) {
       df <- tidyr::fill(df, all_of(fill_cols), .direction = "down")
