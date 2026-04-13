@@ -1292,13 +1292,34 @@ ui <- page_navbar(
             column(6, numericInput("qc_tm_a", "Tm A (\u00b0C)", value = NULL, step = 0.1)),
             column(6, numericInput("qc_tm_b", "Tm B (\u00b0C)", value = NULL, step = 0.1))
           ),
-          uiOutput("qc_tm_auto_status")
+          uiOutput("qc_tm_auto_status"),
+          br(),
+          checkboxInput("qc_show_tm_labels", "Show Tm values above bars", value = FALSE),
+          checkboxInput("qc_show_dtm", "Show \u0394T\u2098 annotation", value = FALSE)
         ),
         div(class = "lab-card",
           div(class = "lab-card-title", span(class = "step-number", "5"), "Plot Title"),
           textInput("qc_title", NULL, placeholder = "e.g. NaOaUCP1 CPM QC"),
           div(class = "lab-card-title", "Plot Style"),
-          numericInput("qc_linewidth", "Line width", value = 1.5, min = 0.5, max = 4, step = 0.25)
+          numericInput("qc_linewidth", "Line width", value = 1.5, min = 0.5, max = 4, step = 0.25),
+          br(),
+          tags$button("\u2699  Advanced Plot Settings", class = "adv-toggle",
+            onclick = "$('#qc_adv_panel').slideToggle(200)"),
+          div(id = "qc_adv_panel", style = "display:none;",
+            div(class = "settings-group",
+              div(class = "settings-group-title", "Legend Position"),
+              selectInput("qc_legend_pos", NULL,
+                choices = c(
+                  "Top right"    = "topright",
+                  "Top left"     = "topleft",
+                  "Bottom right" = "bottomright",
+                  "Bottom left"  = "bottomleft"
+                ),
+                selected = "topright",
+                width = "100%"
+              )
+            )
+          )
         ),
         div(class = "lab-card",
           div(class = "lab-card-title", span(class = "step-number", "6"), "Generate"),
@@ -4694,9 +4715,20 @@ server <- function(input, output, session) {
     pal <- c(lbl_a = col_a, lbl_b = col_b)
     names(pal) <- c(lbl_a, lbl_b)
 
-    # ── Shared theme (Prism-style: white, clean, legend top-right) ──────────
-    prism_theme <- function(base = 12, legend_pos = c(0.98, 0.02),
-                            legend_just = c(1, 0)) {
+    # ── Resolve legend position from UI ──────────────────────────────────────
+    leg_choice <- if (!is.null(input$qc_legend_pos)) input$qc_legend_pos else "topright"
+    leg_pos  <- switch(leg_choice,
+      topright    = c(0.98, 0.98), topleft    = c(0.02, 0.98),
+      bottomright = c(0.98, 0.02), bottomleft = c(0.02, 0.02),
+      c(0.98, 0.98))
+    leg_just <- switch(leg_choice,
+      topright    = c(1, 1), topleft    = c(0, 1),
+      bottomright = c(1, 0), bottomleft = c(0, 0),
+      c(1, 1))
+
+    # ── Shared theme (Prism-style: white, clean) ──────────────────────────────
+    prism_theme <- function(base = 12, legend_pos = leg_pos,
+                            legend_just = leg_just) {
       theme_classic(base_size = base) +
       theme(
         plot.title        = element_text(face = "bold", size = base + 2, hjust = 0),
@@ -4707,7 +4739,6 @@ server <- function(input, output, session) {
         axis.ticks.length = unit(0.18, "cm"),
         legend.position   = legend_pos,
         legend.justification = legend_just,
-        # No fill AND no border on legend box or key swatches
         legend.background = element_rect(fill = NA, colour = NA),
         legend.key        = element_rect(fill = NA, colour = NA),
         legend.key.size   = unit(0.9, "lines"),
@@ -4721,7 +4752,6 @@ server <- function(input, output, session) {
     }
 
     # -- Plot 1: Raw Fluorescence ------------------------------------------
-    # y from 0 to data max; legend pinned bottom-right (data lives in upper half)
     p_raw <- ggplot(raw_df, aes(x = Temperature, y = Value, colour = Sample)) +
       geom_line(linewidth = lw) +
       scale_colour_manual(values = pal) +
@@ -4731,10 +4761,9 @@ server <- function(input, output, session) {
                          expand = c(0, 0)) +
       labs(title = if (nchar(title) > 0) paste(title, "FU") else NULL,
            x = "Temperature (\u00b0C)", y = "Fluorescence (a.u.)") +
-      prism_theme(legend_pos = c(0.98, 0.02), legend_just = c(1, 0))
+      prism_theme()
 
     # -- Plot 2: dF/dT -----------------------------------------------------
-    # Peaks in middle; signal near zero at high T so legend safe bottom-right
     p_dfdt <- ggplot(dfdt_df, aes(x = Temperature, y = Value, colour = Sample)) +
       geom_hline(yintercept = 0, colour = "grey60", linewidth = 0.4) +
       geom_line(linewidth = lw) +
@@ -4744,36 +4773,75 @@ server <- function(input, output, session) {
       scale_y_continuous(expand = expansion(mult = c(0.08, 0.12))) +
       labs(title = if (nchar(title) > 0) paste(title, "dF/dT") else NULL,
            x = "Temperature (\u00b0C)", y = "dF/dT") +
-      prism_theme(legend_pos = c(0.98, 0.02), legend_just = c(1, 0))
+      prism_theme()
 
-    # -- Plot 3: Tm bar chart (y fixed 25-75 degC; black bar border) -------
+    # -- Plot 3: Tm bar chart -----------------------------------------------
+    show_tm_labels <- isTRUE(input$qc_show_tm_labels)
+    show_dtm       <- isTRUE(input$qc_show_dtm)
+    dtm_val        <- tm_b - tm_a
+
     tm_df <- data.frame(
       Sample = factor(c(lbl_a, lbl_b), levels = c(lbl_a, lbl_b)),
       Tm     = c(tm_a, tm_b),
       Col    = c(col_a, col_b)
     )
-
-    # Use numeric x-axis and set labels manually for clean geom_rect rendering
     tm_df$x_num <- c(1, 2)
     tm_df$label <- c(lbl_a, lbl_b)
-    bar_width <- 0.4
+    bar_width    <- 0.4
+
+    # x-axis upper limit: extend right if showing ΔTm annotation
+    x_hi <- if (show_dtm) 3.4 else 2.6
 
     p_tm <- ggplot(tm_df) +
-      # Bars from y=25 (axis baseline) to Tm value
       geom_rect(aes(xmin = x_num - bar_width/2, xmax = x_num + bar_width/2,
                     ymin = 25, ymax = Tm, fill = label),
                 colour = "black", linewidth = 0.6, show.legend = FALSE) +
       geom_point(aes(x = x_num, y = Tm), size = 2.5, colour = "black", shape = 16) +
       scale_fill_manual(values = pal) +
       scale_x_continuous(breaks = c(1, 2), labels = c(lbl_a, lbl_b),
-                         limits = c(0.4, 2.6), expand = c(0, 0)) +
+                         limits = c(0.4, x_hi), expand = c(0, 0)) +
       scale_y_continuous(limits = c(25, 75), breaks = seq(25, 75, 10),
                          expand = expansion(mult = c(0, 0.02))) +
       labs(title = if (nchar(title) > 0) paste(title, "Tm") else NULL,
-           x = if (nchar(title) > 0) gsub(" CPM QC", "", title) else "Sample",
-           y = "T\u2098 (\u00b0C)") +
-      prism_theme(legend_pos = "none", legend_just = c(0.5, 0.5)) +
-      theme(axis.title.x = element_text(face = "bold"))
+           x = NULL, y = "T\u2098 (\u00b0C)") +
+      prism_theme(legend_pos = "none", legend_just = c(0.5, 0.5))
+
+    # Optional: Tm value labels above each bar in matching bar colour
+    if (show_tm_labels) {
+      p_tm <- p_tm +
+        geom_text(data = tm_df,
+                  aes(x = x_num, y = Tm + 0.8,
+                      label = sprintf("%.1f\u00b0C", Tm),
+                      colour = label),
+                  vjust = 0, size = 3.5, fontface = "bold",
+                  inherit.aes = FALSE) +
+        scale_colour_manual(values = pal, guide = "none")
+    }
+
+    # Optional: ΔTm annotation to the right of the bars
+    if (show_dtm) {
+      mid_y   <- (tm_a + tm_b) / 2
+      x_line  <- 2.38   # closer to bar 2 (right edge of bar is at 2 + 0.2 = 2.2)
+      x_label <- 2.46   # tight gap between bracket and text
+
+      p_tm <- p_tm +
+        # bracket lines
+        annotate("segment", x = x_line, xend = x_line,
+                 y = tm_a, yend = tm_b,
+                 colour = "black", linewidth = 0.6) +
+        annotate("segment", x = x_line - 0.05, xend = x_line,
+                 y = tm_a, yend = tm_a,
+                 colour = "black", linewidth = 0.6) +
+        annotate("segment", x = x_line - 0.05, xend = x_line,
+                 y = tm_b, yend = tm_b,
+                 colour = "black", linewidth = 0.6) +
+        # ΔTₘ label — left-aligned from x_label
+        annotate("text",
+                 x = x_label, y = mid_y,
+                 label = sprintf("\u0394T\u2098 = %.1f\u00b0C", dtm_val),
+                 hjust = 0, vjust = 0.5,
+                 size = 3.5, fontface = "bold", colour = "black")
+    }
 
     qc_results(list(
       p_raw  = p_raw,
@@ -4860,7 +4928,10 @@ server <- function(input, output, session) {
     content  = function(f) save_qc_plot(qc_results()$p_dfdt, f))
   output$qc_dl_tm   <- downloadHandler(
     filename = function() paste0("CPM_QC_Tm_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png"),
-    content  = function(f) save_qc_plot(qc_results()$p_tm, f, w = 4, h = 5))
+    content  = function(f) {
+      w <- if (isTRUE(isolate(input$qc_show_dtm))) 6 else 4
+      save_qc_plot(qc_results()$p_tm, f, w = w, h = 5)
+    })
   output$qc_dl_csv  <- downloadHandler(
     filename = function() paste0("CPM_QC_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
     content  = function(file) {
