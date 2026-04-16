@@ -4577,6 +4577,8 @@ server <- function(input, output, session) {
     shinyjs::reset("qc_label_b")
     shinyjs::reset("qc_color_a")
     shinyjs::reset("qc_color_b")
+    updateNumericInput(session, "qc_tm_a", value = NA)
+    updateNumericInput(session, "qc_tm_b", value = NA)
     showNotification("CPM QC data cleared", type = "message", duration = 2)
   })
 
@@ -4637,12 +4639,11 @@ server <- function(input, output, session) {
     tm_a <- get_auto_tm(input$qc_sample_a)
     tm_b <- get_auto_tm(input$qc_sample_b)
 
-    # Update the number inputs with auto values (only if user hasn't typed)
-    if (!is.null(tm_a) && !is.na(tm_a) &&
-        (is.na(input$qc_tm_a) || input$qc_tm_a == 0))
+    # Always update Tm inputs when sample selection changes.
+    # No "only if empty" guard — stale values from a previous sample must be replaced.
+    if (!is.null(tm_a) && !is.na(tm_a))
       updateNumericInput(session, "qc_tm_a", value = tm_a)
-    if (!is.null(tm_b) && !is.na(tm_b) &&
-        (is.na(input$qc_tm_b) || input$qc_tm_b == 0))
+    if (!is.null(tm_b) && !is.na(tm_b))
       updateNumericInput(session, "qc_tm_b", value = tm_b)
 
     div(class = "status-pill ready", style = "margin-top:0.3rem;",
