@@ -957,6 +957,35 @@
         "Built": "R 4.3.2; ; 2023-11-14 03:30:18 UTC; windows"
       }
     },
+    "ggrepel": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Package": "ggrepel",
+        "Version": "0.9.5",
+        "Authors@R": "c(\n    person(\"Kamil\", \"Slowikowski\", email = \"kslowikowski@gmail.com\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0002-2843-6370\")),\n    person(\"Alicia\", \"Schep\", role = \"ctb\", comment = c(ORCID = \"0000-0002-3915-0618\")),\n    person(\"Sean\", \"Hughes\", role = \"ctb\", comment = c(ORCID = \"0000-0002-9409-9405\")),\n    person(\"Trung Kien\", \"Dang\", role = \"ctb\", comment = c(ORCID = \"0000-0001-7562-6495\")),\n    person(\"Saulius\", \"Lukauskas\", role = \"ctb\"),\n    person(\"Jean-Olivier\", \"Irisson\", role = \"ctb\", comment = c(ORCID = \"0000-0003-4920-3880\")),\n    person(\"Zhian N\", \"Kamvar\", role = \"ctb\", comment = c(ORCID = \"0000-0003-1458-7108\")),\n    person(\"Thompson\", \"Ryan\", role = \"ctb\", comment = c(ORCID = \"0000-0002-0450-8181\")),\n    person(\"Dervieux\", \"Christophe\", role = \"ctb\", comment = c(ORCID = \"0000-0003-4474-2498\")),\n    person(\"Yutani\", \"Hiroaki\", role = \"ctb\"),\n    person(\"Pierre\", \"Gramme\", role = \"ctb\"),\n    person(\"Amir Masoud\", \"Abdol\", role = \"ctb\"),\n    person(\"Malcolm\", \"Barrett\", role = \"ctb\", comment = c(ORCID = \"0000-0003-0299-5825\")),\n    person(\"Robrecht\", \"Cannoodt\", role = \"ctb\", comment = c(ORCID = \"0000-0003-3641-729X\")),\n    person(\"Michał\", \"Krassowski\", role = \"ctb\", comment = c(ORCID = \"0000-0002-9638-7785\")),\n    person(\"Michael\", \"Chirico\", role = \"ctb\", comment = c(ORCID = \"0000-0003-0787-087X\")),\n    person(\"Pedro\", \"Aphalo\", role = \"ctb\", comment = c(ORCID = \"0000-0003-3385-972X\")),\n    person(\"Francis\", \"Barton\", role = \"ctb\")\n    )",
+        "Title": "Automatically Position Non-Overlapping Text Labels with\n'ggplot2'",
+        "Description": "Provides text and label geoms for 'ggplot2' that help to avoid\n    overlapping text labels. Labels repel away from each other and away from the\n    data points.",
+        "Depends": "R (>= 3.0.0), ggplot2 (>= 2.2.0)",
+        "Imports": "grid, Rcpp, rlang (>= 0.3.0), scales (>= 0.5.0), withr (>=\n2.5.0)",
+        "Suggests": "knitr, rmarkdown, testthat, svglite, vdiffr, gridExtra, ggpp,\npatchwork, devtools, prettydoc, ggbeeswarm, dplyr, magrittr,\nreadr, stringr",
+        "VignetteBuilder": "knitr",
+        "License": "GPL-3 | file LICENSE",
+        "URL": "https://ggrepel.slowkow.com/, https://github.com/slowkow/ggrepel",
+        "BugReports": "https://github.com/slowkow/ggrepel/issues",
+        "RoxygenNote": "7.2.3",
+        "LinkingTo": "Rcpp",
+        "Encoding": "UTF-8",
+        "NeedsCompilation": "yes",
+        "Packaged": "2024-01-10 16:39:29 UTC; ks38",
+        "Author": "Kamil Slowikowski [aut, cre] (<https://orcid.org/0000-0002-2843-6370>),\n  Alicia Schep [ctb] (<https://orcid.org/0000-0002-3915-0618>),\n  Sean Hughes [ctb] (<https://orcid.org/0000-0002-9409-9405>),\n  Trung Kien Dang [ctb] (<https://orcid.org/0000-0001-7562-6495>),\n  Saulius Lukauskas [ctb],\n  Jean-Olivier Irisson [ctb] (<https://orcid.org/0000-0003-4920-3880>),\n  Zhian N Kamvar [ctb] (<https://orcid.org/0000-0003-1458-7108>),\n  Thompson Ryan [ctb] (<https://orcid.org/0000-0002-0450-8181>),\n  Dervieux Christophe [ctb] (<https://orcid.org/0000-0003-4474-2498>),\n  Yutani Hiroaki [ctb],\n  Pierre Gramme [ctb],\n  Amir Masoud Abdol [ctb],\n  Malcolm Barrett [ctb] (<https://orcid.org/0000-0003-0299-5825>),\n  Robrecht Cannoodt [ctb] (<https://orcid.org/0000-0003-3641-729X>),\n  Michał Krassowski [ctb] (<https://orcid.org/0000-0002-9638-7785>),\n  Michael Chirico [ctb] (<https://orcid.org/0000-0003-0787-087X>),\n  Pedro Aphalo [ctb] (<https://orcid.org/0000-0003-3385-972X>),\n  Francis Barton [ctb]",
+        "Maintainer": "Kamil Slowikowski <kslowikowski@gmail.com>",
+        "Repository": "CRAN",
+        "Date/Publication": "2024-01-10 21:03:02 UTC",
+        "Built": "R 4.3.2; x86_64-w64-mingw32; 2024-01-23 03:56:36 UTC; windows",
+        "Archs": "x64"
+      }
+    },
     "glue": {
       "Source": "CRAN",
       "Repository": "https://cran.rstudio.com",
@@ -1745,6 +1774,34 @@
         "Date/Publication": "2023-02-06 17:57:52 UTC",
         "Built": "R 4.3.3; x86_64-w64-mingw32; 2024-07-08 00:21:21 UTC; windows",
         "Archs": "x64"
+      }
+    },
+    "patchwork": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Package": "patchwork",
+        "Type": "Package",
+        "Title": "The Composer of Plots",
+        "Version": "1.2.0",
+        "Authors@R": "\n    person(given = \"Thomas Lin\",\n           family = \"Pedersen\",\n           role = c(\"cre\", \"aut\"),\n           email = \"thomasp85@gmail.com\",\n           comment = c(ORCID = \"0000-0002-5147-4711\"))",
+        "Maintainer": "Thomas Lin Pedersen <thomasp85@gmail.com>",
+        "Description": "The 'ggplot2' package provides a strong API for sequentially \n    building up a plot, but does not concern itself with composition of multiple\n    plots. 'patchwork' is a package that expands the API to allow for \n    arbitrarily complex composition of plots by, among others, providing \n    mathematical operators for combining multiple plots. Other packages that try \n    to address this need (but with a different approach) are 'gridExtra' and \n    'cowplot'.",
+        "License": "MIT + file LICENSE",
+        "Encoding": "UTF-8",
+        "Imports": "ggplot2 (>= 3.0.0), gtable, grid, stats, grDevices, utils,\ngraphics, rlang, cli",
+        "RoxygenNote": "7.2.3",
+        "URL": "https://patchwork.data-imaginist.com,\nhttps://github.com/thomasp85/patchwork",
+        "BugReports": "https://github.com/thomasp85/patchwork/issues",
+        "Suggests": "knitr, rmarkdown, gridGraphics, gridExtra, ragg, testthat (>=\n2.1.0), vdiffr, covr, png",
+        "VignetteBuilder": "knitr",
+        "Config/Needs/website": "gifski",
+        "NeedsCompilation": "no",
+        "Packaged": "2024-01-08 10:09:15 UTC; thomas",
+        "Author": "Thomas Lin Pedersen [cre, aut]\n    (<https://orcid.org/0000-0002-5147-4711>)",
+        "Repository": "CRAN",
+        "Date/Publication": "2024-01-08 14:40:02 UTC",
+        "Built": "R 4.3.2; ; 2024-01-23 03:56:37 UTC; windows"
       }
     },
     "pillar": {
@@ -2895,10 +2952,10 @@
   },
   "files": {
     "app.R": {
-      "checksum": "5d35cbe907a6eea2fb5ff986c3a12d67"
+      "checksum": "8b229c31f157d10330b62bb64b4b3ba1"
     },
     "global.R": {
-      "checksum": "e4634394fb765042626c78d04a4782c8"
+      "checksum": "ded05a47a9e4589373ef68cd8ab2f3aa"
     },
     "inst/analytics/plot_akta_improved.R": {
       "checksum": "23d7cc5deb4a9a683c456dcfce6ea8ff"
@@ -2978,6 +3035,9 @@
     "inst/examples/ucp1/Conductance_Example_RawData_Sample9.csv": {
       "checksum": "4c603c7a6b9d762edaa40197990ce857"
     },
+    "inst/examples/uvvis_a280_example.csv": {
+      "checksum": "c55b4c067436863b789d03b1fbcc74da"
+    },
     "inst/examples/western_example.jpg": {
       "checksum": "ca2b9ed76f7c2c5093af7e4469b4b90f"
     },
@@ -2994,7 +3054,7 @@
       "checksum": "165f7627623d949dad6a4ad728c5edd0"
     },
     "R/mod_cpm_contour.R": {
-      "checksum": "925ca0a811cd5573a4b11950663af072"
+      "checksum": "102297faf6147aa97705f00f11314ee9"
     },
     "R/mod_cpm_qc.R": {
       "checksum": "9ee25c3dea6553efd434f975774817a3"
@@ -3003,10 +3063,13 @@
       "checksum": "26e35caee7d09ed43ca8ac1c8c3979d7"
     },
     "R/mod_home.R": {
-      "checksum": "39c64d1679c8685b20a30fbef2de5e17"
+      "checksum": "ffb59153756cdab19ec5966c5d8386fb"
     },
     "R/mod_ucp1.R": {
       "checksum": "cb00785ddfdd7d74440797a999493d79"
+    },
+    "R/mod_uvvis.R": {
+      "checksum": "07627a6b3b15bb33a767812612a066f8"
     },
     "R/utils_theme.R": {
       "checksum": "b282aa0b9d2b4c1d82786baa411d842e"

@@ -68,7 +68,11 @@ home_ui <- function(id) {
       shiny::column(3, tool_card("UCP1", "UCP1 Proton Conductance",
         "Automated pre-processing of fluorimetric proton conductance assay data. Upload raw intensity traces for calibration and analysis.",
         "vial", c(".csv", "Fluorimetry", "UCP1"),
-        accent = "#22C55E"))
+        accent = "#22C55E")),
+      shiny::column(3, tool_card("UVVIS", "UV-Vis Absorbance",
+        "Plot DS-11 / NanoDrop UV-Vis spectra. Single-sample view shows A280, E1%, calculated concentration, and 260/280 ratio in a side panel.",
+        "wave-square", c(".csv", "DS-11", "A280"),
+        accent = "#0EA5E9"))
     )
   )
 }

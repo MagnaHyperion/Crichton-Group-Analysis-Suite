@@ -19,7 +19,7 @@ required <- c(
   # Shiny stack
   "shiny", "bslib", "shinyjs",
   # Plotting & I/O
-  "ggplot2", "scales", "gridExtra",
+  "ggplot2", "scales", "gridExtra", "patchwork",
   # Tidyverse pieces used by softmax_bca_improved.R + tm_analysis_functions.R
   "readr", "dplyr", "tidyr", "stringr", "purrr", "tibble",
   # Base utilities
@@ -57,6 +57,7 @@ library(readr)
 library(dplyr)
 library(tidyr)
 library(gridExtra)
+library(patchwork)
 library(magick)
 
 # -- Shiny upload size limit --------------------------------------------------
@@ -109,6 +110,6 @@ for (f in c("softmax_bca_improved.R",
 
 # -- Modules ------------------------------------------------------------------
 for (m in c("mod_home", "mod_bca", "mod_cpm", "mod_akta", "mod_gel",
-            "mod_cpm_qc", "mod_cpm_contour", "mod_ucp1")) {
+            "mod_cpm_qc", "mod_cpm_contour", "mod_ucp1", "mod_uvvis")) {
   source(file.path(app_dir, "R", paste0(m, ".R")))
 }

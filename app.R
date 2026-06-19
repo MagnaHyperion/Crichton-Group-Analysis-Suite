@@ -79,6 +79,11 @@ ui <- bslib::page_navbar(
                    value = "UCP1",
                    ucp1_ui("ucp1")),
 
+  bslib::nav_panel("UV-Vis",
+                   icon  = shiny::icon("wave-square"),
+                   value = "UVVIS",
+                   uvvis_ui("uvvis")),
+
   # Right-aligned Clear button. Each tool's server still owns the click;
   # we just provide a single navbar-level affordance that fires the
   # currently visible tool's clear via JS. See the observer in server().
@@ -145,6 +150,7 @@ server <- function(input, output, session) {
   cpm_qc_server("cpm_qc")
   cpm_contour_server("cpm_contour")
   ucp1_server("ucp1")
+  uvvis_server("uvvis")
 }
 
 
