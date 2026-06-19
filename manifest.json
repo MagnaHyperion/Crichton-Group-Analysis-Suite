@@ -1747,6 +1747,34 @@
         "Archs": "x64"
       }
     },
+    "patchwork": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Package": "patchwork",
+        "Type": "Package",
+        "Title": "The Composer of Plots",
+        "Version": "1.2.0",
+        "Authors@R": "\n    person(given = \"Thomas Lin\",\n           family = \"Pedersen\",\n           role = c(\"cre\", \"aut\"),\n           email = \"thomasp85@gmail.com\",\n           comment = c(ORCID = \"0000-0002-5147-4711\"))",
+        "Maintainer": "Thomas Lin Pedersen <thomasp85@gmail.com>",
+        "Description": "The 'ggplot2' package provides a strong API for sequentially \n    building up a plot, but does not concern itself with composition of multiple\n    plots. 'patchwork' is a package that expands the API to allow for \n    arbitrarily complex composition of plots by, among others, providing \n    mathematical operators for combining multiple plots. Other packages that try \n    to address this need (but with a different approach) are 'gridExtra' and \n    'cowplot'.",
+        "License": "MIT + file LICENSE",
+        "Encoding": "UTF-8",
+        "Imports": "ggplot2 (>= 3.0.0), gtable, grid, stats, grDevices, utils,\ngraphics, rlang, cli",
+        "RoxygenNote": "7.2.3",
+        "URL": "https://patchwork.data-imaginist.com,\nhttps://github.com/thomasp85/patchwork",
+        "BugReports": "https://github.com/thomasp85/patchwork/issues",
+        "Suggests": "knitr, rmarkdown, gridGraphics, gridExtra, ragg, testthat (>=\n2.1.0), vdiffr, covr, png",
+        "VignetteBuilder": "knitr",
+        "Config/Needs/website": "gifski",
+        "NeedsCompilation": "no",
+        "Packaged": "2024-01-08 10:09:15 UTC; thomas",
+        "Author": "Thomas Lin Pedersen [cre, aut]\n    (<https://orcid.org/0000-0002-5147-4711>)",
+        "Repository": "CRAN",
+        "Date/Publication": "2024-01-08 14:40:02 UTC",
+        "Built": "R 4.3.2; ; 2024-01-23 03:56:37 UTC; windows"
+      }
+    },
     "pillar": {
       "Source": "CRAN",
       "Repository": "https://cran.rstudio.com",
@@ -2898,7 +2926,7 @@
       "checksum": "5d35cbe907a6eea2fb5ff986c3a12d67"
     },
     "global.R": {
-      "checksum": "e4634394fb765042626c78d04a4782c8"
+      "checksum": "cdddf057077079a568b3e92ec8906f9e"
     },
     "inst/analytics/plot_akta_improved.R": {
       "checksum": "23d7cc5deb4a9a683c456dcfce6ea8ff"
@@ -2994,7 +3022,7 @@
       "checksum": "165f7627623d949dad6a4ad728c5edd0"
     },
     "R/mod_cpm_contour.R": {
-      "checksum": "925ca0a811cd5573a4b11950663af072"
+      "checksum": "df0c374741cc6a332b87a6b9804bd5ab"
     },
     "R/mod_cpm_qc.R": {
       "checksum": "9ee25c3dea6553efd434f975774817a3"

@@ -77,6 +77,21 @@ cpm_contour_ui <- function(id) {
                   "Yellow \U2192 Orange \U2192 Red"= "YlOrRd"),
                 selected = "grayscale", width = "100%"),
               shiny::br(),
+              shiny::tags$label("T\u2098 trace colour",
+                                style = "color:var(--muted);font-size:0.78rem;"),
+              info_box("Colour for the Tm line, error bars, and data points. Choose something that contrasts with your contour palette so they don't blend in."),
+              shiny::selectInput(ns("tm_colour"), NULL,
+                choices = c(
+                  "Cyan"        = "#06B6D4",
+                  "Bright cyan" = "#00E5FF",
+                  "Magenta"     = "#E91E63",
+                  "Yellow"      = "#FACC15",
+                  "Lime"        = "#84CC16",
+                  "Orange"      = "#F97316",
+                  "White"       = "#FFFFFF",
+                  "Red"         = "#EF4444"),
+                selected = "#06B6D4", width = "100%"),
+              shiny::br(),
               shiny::tags$label("Intensity threshold",
                                 style = "color:var(--muted);font-size:0.78rem;"),
               info_box(paste("Values below this threshold are shown as background colour.",
@@ -84,6 +99,12 @@ cpm_contour_ui <- function(id) {
               shiny::sliderInput(ns("threshold"), NULL,
                                  min = 0, max = 0.95, value = 0, step = 0.05,
                                  width = "100%"),
+              shiny::br(),
+              shiny::tags$label("X-axis title",
+                                style = "color:var(--muted);font-size:0.78rem;"),
+              shiny::textInput(ns("x_title"), NULL,
+                value = "Log [Concentration (\u03bcM)]",
+                width = "100%"),
               shiny::br(),
               shiny::tags$button("\u2705  Temperature Range", class = "adv-toggle",
                 onclick = sprintf("$('#%s').slideToggle(200)", ns("yrange_panel"))),
@@ -101,13 +122,42 @@ cpm_contour_ui <- function(id) {
                 )
               )
             ),
+            lab_card(
+              step_title(5, "Standard Panel (Optional)"),
+              info_box(paste("Upload a dF/dT file for a control sample (e.g.",
+                             "free nanobody) to display as a small reference",
+                             "panel to the right of the main Tm plot. Useful",
+                             "for showing that high-Tm peaks in titration data",
+                             "match a known control's melt signature.")),
+              shiny::fileInput(ns("standard_file"), NULL, accept = c(".csv"),
+                               buttonLabel = "Browse\u2026",
+                               placeholder = "No standard file (optional)"),
+              shiny::uiOutput(ns("standard_status")),
+              shiny::br(),
+              shiny::selectInput(ns("standard_colour"), "Panel colour",
+                choices = c(
+                  "Auto (match main palette)" = "auto",
+                  "Red"           = "#E41A1C",
+                  "Blue"          = "#377EB8",
+                  "Green"         = "#4DAF4A",
+                  "Purple"        = "#984EA3",
+                  "Orange"        = "#FF7F00",
+                  "Teal"          = "#1B9E77",
+                  "Magenta"       = "#E7298A",
+                  "Yellow-Brown"  = "#E6AB02"),
+                selected = "auto", width = "100%"),
+              shiny::sliderInput(ns("standard_opacity"),
+                "Panel opacity",
+                min = 0.1, max = 1.0, value = 0.85, step = 0.05,
+                width = "100%")
+            ),
             # The Analyse box (last in the left column) combines what used
             # to be separate "Process Data" and "Export" cards. Putting
             # them together matches the pattern used by every other tool -
             # the run button sits above the export buttons since you can
             # only export after analysis succeeds.
             lab_card(
-              step_title(5, "Analyse"),
+              step_title(6, "Analyse"),
               shiny::actionButton(ns("process"), "\u25b6  Run Analysis",
                                   class = "btn-run"),
               shiny::br(), shiny::br(),
@@ -181,6 +231,7 @@ cpm_contour_server <- function(id) {
     # by user upload OR by the example loader on session start.
     current_dfdt_file <- shiny::reactiveVal(NULL)
     current_tm_file   <- shiny::reactiveVal(NULL)
+    current_standard_file <- shiny::reactiveVal(NULL)
 
     # =====================================================================
     # Parsing helpers - extracted so the upload observers and example
@@ -235,13 +286,15 @@ cpm_contour_server <- function(id) {
     # by the navbar Clear button.
     # =====================================================================
     .clear_state <- function() {
-      state$dfdt_raw       <- NULL
-      state$tm_raw         <- NULL
-      state$dfdt_processed <- NULL
-      state$tm_processed   <- NULL
-      state$sample_names   <- NULL
-      state$temperatures   <- NULL
-      state$tm_pairing     <- NULL
+      state$dfdt_raw         <- NULL
+      state$tm_raw           <- NULL
+      state$dfdt_processed   <- NULL
+      state$tm_processed     <- NULL
+      state$sample_names     <- NULL
+      state$temperatures     <- NULL
+      state$tm_pairing       <- NULL
+      state$standard_raw     <- NULL
+      state$standard_processed <- NULL
     }
 
     # =====================================================================
@@ -263,6 +316,17 @@ cpm_contour_server <- function(id) {
       state$tm_processed <- NULL
       state$tm_pairing   <- NULL
       current_tm_file(input$tm_file)
+    }, ignoreInit = TRUE)
+
+    # ---- Standard overlay upload --------------------------------------
+    # Optional control file (e.g. nanobody-only dF/dT). Uses the same
+    # .parse_dfdt() helper as the main data since the format is identical;
+    # the only difference is downstream presentation as a faded overlay
+    # on the Tm plot.
+    shiny::observeEvent(input$standard_file, {
+      state$standard_raw       <- NULL
+      state$standard_processed <- NULL
+      current_standard_file(input$standard_file)
     }, ignoreInit = TRUE)
 
     # Parse observers - single path for both upload and example load.
@@ -296,6 +360,66 @@ cpm_contour_server <- function(id) {
           type = "message", duration = 3)
       }, error = function(e) {
         shiny::showNotification(paste("Error reading Tm file:", e$message),
+                                type = "error", duration = 5)
+      })
+    }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+    shiny::observeEvent(current_standard_file(), {
+      cf <- current_standard_file()
+      shiny::req(cf)
+      tryCatch({
+        parsed <- .parse_dfdt(cf$datapath)
+        state$standard_raw <- parsed
+        n_unique <- length(unique(parsed$sample_names))
+        shiny::showNotification(
+          sprintf("\u2713 Standard loaded: %d sample(s)", n_unique),
+          type = "message", duration = 3)
+      }, error = function(e) {
+        shiny::showNotification(paste("Error reading standard file:", e$message),
+                                type = "error", duration = 5)
+      })
+    }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+    # Compute the standard's normalized mean matrix the same way as the
+    # main data: average replicates, normalise each column to [0,1].
+    # Triggered whenever standard_raw changes (which is just on upload).
+    shiny::observeEvent(state$standard_raw, {
+      r <- state$standard_raw
+      shiny::req(r)
+      tryCatch({
+        unique_samples <- unique(r$sample_names)
+        n_temps        <- length(r$temperatures)
+        n_samples      <- length(unique_samples)
+        mean_matrix <- matrix(NA, nrow = n_temps, ncol = n_samples,
+                              dimnames = list(NULL, unique_samples))
+        for (i in seq_along(unique_samples)) {
+          cols <- which(r$sample_names == unique_samples[i])
+          for (j in seq_len(n_temps)) {
+            v <- as.numeric(r$values[j, cols])
+            v <- v[!is.na(v)]
+            if (length(v) > 0) mean_matrix[j, i] <- mean(v)
+          }
+        }
+        norm_matrix <- apply(mean_matrix, 2, function(col) {
+          mn <- min(col, na.rm = TRUE); mx <- max(col, na.rm = TRUE)
+          rng <- mx - mn
+          if (is.na(rng) || rng == 0) rep(0, length(col)) else (col - mn) / rng
+        })
+        # R's apply() drops the dimension when there's only 1 column, so
+        # a single-sample standard (which is the common case - one
+        # NB-only control) would arrive here as a length-n_temps vector
+        # instead of a 1-column matrix. Subsequent code subsets it as
+        # norm[mask, col_idx] which fails on a vector. Reshape back.
+        if (!is.matrix(norm_matrix)) {
+          norm_matrix <- matrix(norm_matrix, ncol = n_samples,
+                                dimnames = list(NULL, unique_samples))
+        }
+        colnames(norm_matrix) <- unique_samples
+        state$standard_processed <- list(temperatures = r$temperatures,
+                                         sample_names = unique_samples,
+                                         norm         = norm_matrix)
+      }, error = function(e) {
+        shiny::showNotification(paste("Error processing standard:", e$message),
                                 type = "error", duration = 5)
       })
     }, ignoreInit = TRUE, ignoreNULL = TRUE)
@@ -462,6 +586,7 @@ cpm_contour_server <- function(id) {
     # =====================================================================
     shiny::observeEvent(input$clear, {
       current_dfdt_file(NULL); current_tm_file(NULL)
+      current_standard_file(NULL)
       .clear_state()
       # Reload examples so preview is never empty after Clear.
       tryCatch(.load_example_files(), error = function(e) NULL)
@@ -530,6 +655,18 @@ cpm_contour_server <- function(id) {
         n_conc <- length(state$tm_raw$concentrations)
         status_pill("ready",
           sprintf("\u2713 Loaded: %d concentrations", n_conc))
+      }
+    })
+
+    # ---- Standard panel status ----------------------------------------
+    # The standard is now rendered as its own side panel rather than
+    # overlaid on the main plot, so we just need a load-status pill -
+    # no per-sample concentration input needed (all unique samples in
+    # the standard file are shown as separate tile columns in file order).
+    output$standard_status <- shiny::renderUI({
+      if (!is.null(state$standard_raw)) {
+        n <- length(unique(state$standard_raw$sample_names))
+        status_pill("ready", sprintf("\u2713 Loaded: %d standard sample(s)", n))
       }
     })
 
@@ -620,9 +757,17 @@ cpm_contour_server <- function(id) {
                                                     fill = NA, linewidth = 0.6))
     }, bg = "#0B1623")
 
+    # The standard is now rendered as a SEPARATE side panel, so we just
+    # pass through the processed object. No per-sample concentration
+    # logic needed - the side panel shows every unique sample in the
+    # file as its own tile column in file order.
+    .standard_overlay_data <- shiny::reactive({
+      state$standard_processed
+    })
+
     output$tm_plot <- shiny::renderPlot({
       shiny::req(state$tm_processed, state$dfdt_processed)
-      .contour_tm_plot(
+      p_main <- .contour_tm_plot(
         tm           = state$tm_processed,
         processed    = state$dfdt_processed,
         tm_raw       = state$tm_raw,
@@ -631,8 +776,42 @@ cpm_contour_server <- function(id) {
         threshold    = input$threshold,
         y_lo         = input$ymin,
         y_hi         = input$ymax,
-        dark         = TRUE
+        dark         = TRUE,
+        tm_colour    = input$tm_colour %||% "#06B6D4",
+        x_title      = input$x_title %||% "Log [Concentration (\u03bcM)]"
       )
+      sp <- .standard_overlay_data()
+      if (is.null(sp)) {
+        return(p_main)
+      }
+      p_std <- .contour_standard_plot(
+        sp           = sp,
+        threshold    = input$threshold,
+        y_lo         = input$ymin,
+        y_hi         = input$ymax,
+        dark         = TRUE,
+        panel_colour = input$standard_colour,
+        opacity      = input$standard_opacity,
+        palette_name = input$palette,
+        main_tile_w  = .contour_main_geom(state$tm_processed$concentrations)$tile_w,
+        main_x_range = .contour_main_geom(state$tm_processed$concentrations)$x_range,
+        layout_width_ratio = 4)
+      # Compose the two plots. patchwork is preferred because it
+      # panel-aligns the two plots (essential here - the user needs
+      # to compare temperatures across both plots, so the panels MUST
+      # have identical vertical extents). If patchwork isn't loaded
+      # for some reason (install missing, R session needs restart),
+      # fall back to gridExtra::grid.arrange so the tool still works,
+      # just with slightly imperfect alignment.
+      if (requireNamespace("patchwork", quietly = TRUE) &&
+          "patchwork" %in% loadedNamespaces()) {
+        p_main + p_std + patchwork::plot_layout(widths = c(4, 1))
+      } else {
+        warning("patchwork not loaded - falling back to gridExtra. ",
+                "Install with install.packages('patchwork') and ",
+                "restart R for properly aligned panels.")
+        gridExtra::grid.arrange(p_main, p_std, ncol = 2, widths = c(4, 1))
+      }
     }, bg = "#0B1623")
 
     # =====================================================================
@@ -710,7 +889,7 @@ cpm_contour_server <- function(id) {
       filename = function() ts_filename("cpm_tmplot", "png"),
       content  = function(file) {
         shiny::req(state$tm_processed, state$dfdt_processed)
-        plt <- .contour_tm_plot(
+        p_main <- .contour_tm_plot(
           tm           = state$tm_processed,
           processed    = state$dfdt_processed,
           tm_raw       = state$tm_raw,
@@ -719,9 +898,38 @@ cpm_contour_server <- function(id) {
           threshold    = shiny::isolate(input$threshold),
           y_lo         = shiny::isolate(input$ymin),
           y_hi         = shiny::isolate(input$ymax),
-          dark         = FALSE
+          dark         = FALSE,
+          tm_colour    = shiny::isolate(input$tm_colour) %||% "#06B6D4",
+          x_title      = shiny::isolate(input$x_title) %||% "Log [Concentration (\u03bcM)]"
         )
-        ggplot2::ggsave(file, plt, width = 10, height = 7, dpi = 300, bg = "white")
+        sp <- shiny::isolate(.standard_overlay_data())
+        if (is.null(sp)) {
+          ggplot2::ggsave(file, p_main, width = 10, height = 7, dpi = 300, bg = "white")
+        } else {
+          p_std <- .contour_standard_plot(
+            sp           = sp,
+            threshold    = shiny::isolate(input$threshold),
+            y_lo         = shiny::isolate(input$ymin),
+            y_hi         = shiny::isolate(input$ymax),
+            dark         = FALSE,
+            panel_colour = shiny::isolate(input$standard_colour),
+            opacity      = shiny::isolate(input$standard_opacity),
+            palette_name = shiny::isolate(input$palette),
+            main_tile_w  = .contour_main_geom(state$tm_processed$concentrations)$tile_w,
+            main_x_range = .contour_main_geom(state$tm_processed$concentrations)$x_range,
+            layout_width_ratio = 4)
+          # patchwork preferred; gridExtra fallback - see notes in
+          # output$tm_plot for the rationale.
+          if (requireNamespace("patchwork", quietly = TRUE) &&
+              "patchwork" %in% loadedNamespaces()) {
+            combined <- p_main + p_std + patchwork::plot_layout(widths = c(4, 1))
+          } else {
+            combined <- gridExtra::arrangeGrob(p_main, p_std, ncol = 2,
+                                               widths = c(4, 1))
+          }
+          ggplot2::ggsave(file, combined, width = 12.5, height = 7,
+                          dpi = 300, bg = "white")
+        }
         shiny::showNotification("\u2713 Tm plot exported!",
                                 type = "message", duration = 3)
       })
@@ -763,17 +971,37 @@ cpm_contour_server <- function(id) {
 # Build the combined "Tm vs log[concentration] with heatmap fingerprint"
 # plot. Used by both on-screen render and PNG export, with `dark` flipping
 # the colour scheme.
-.contour_tm_plot <- function(tm, processed, tm_raw, tm_pairing,
-                             palette_name, threshold,
-                             y_lo, y_hi, dark = TRUE) {
-
-  conc_num <- suppressWarnings(as.numeric(tm$concentrations))
+# Compute the main Tm plot's tile width (in data units) and the full
+# rendered x-axis range (including the 6% expand on each side). Both
+# .contour_tm_plot and .contour_standard_plot need these numbers - the
+# former to draw its own tiles, the latter to size its tiles so they
+# render at the same pixel width.
+.contour_main_geom <- function(concentrations) {
+  conc_num <- suppressWarnings(as.numeric(concentrations))
   conc_log <- ifelse(is.na(conc_num) | conc_num == 0, 0.001, conc_num)
   log_x    <- log10(conc_log)
 
   tile_w <- if (length(unique(log_x)) > 1)
               min(diff(sort(unique(log_x)))) * 0.85
             else 0.4
+
+  data_range <- if (length(unique(log_x)) > 1) max(log_x) - min(log_x) else 1
+  # expand = expansion(mult = 0.06) adds 6% of the data range on each side
+  x_range_full <- data_range * 1.12
+  if (x_range_full <= 0) x_range_full <- 1
+
+  list(tile_w = tile_w, x_range = x_range_full, log_x = log_x)
+}
+
+.contour_tm_plot <- function(tm, processed, tm_raw, tm_pairing,
+                             palette_name, threshold,
+                             y_lo, y_hi, dark = TRUE,
+                             tm_colour = "#06B6D4",
+                             x_title = "Log [Concentration (\u03bcM)]") {
+
+  geom     <- .contour_main_geom(tm$concentrations)
+  log_x    <- geom$log_x
+  tile_w   <- geom$tile_w
 
   y_lo <- if (!is.null(y_lo) && !is.na(y_lo)) y_lo
           else min(processed$temperatures)
@@ -814,12 +1042,17 @@ cpm_contour_server <- function(id) {
   df <- data.frame(log_x = log_x, Mean = tm$means, SEM = tm$sems)
   x_breaks <- seq(floor(min(log_x)), ceiling(max(log_x)))
 
-  # Foreground colours flip between dark and white themes
-  fg          <- if (dark) "#FFFFFF" else "black"
-  pt_fill     <- if (dark) "#0B1623" else "white"
+  # Foreground colours - tm_colour is the user's choice (cyan default)
+  # for the line/errorbars/points so they don't blend into the contour.
+  # Same colour fills the data point circles too, giving a solid look.
+  fg          <- tm_colour
   axis_line   <- if (dark) "#3A4D63" else "grey40"
   bg_colour   <- if (dark) "#0B1623" else "white"
   text_colour <- if (dark) CG_PALETTE$muted else "black"
+
+  # Replicate dots also follow tm_colour, but more faded so they don't
+  # compete with the main line
+  rep_alpha <- 0.55
 
   p <- ggplot2::ggplot()
   if (!is.null(tile_df) && nrow(tile_df) > 0) {
@@ -834,7 +1067,7 @@ cpm_contour_server <- function(id) {
   if (!is.null(rep_df) && nrow(rep_df) > 0) {
     p <- p + ggplot2::geom_point(data = rep_df,
       ggplot2::aes(x = log_x, y = Tm),
-      colour = "#AECBFA", size = 1.8, alpha = 0.55, shape = 16,
+      colour = fg, size = 1.8, alpha = rep_alpha, shape = 16,
       inherit.aes = FALSE)
   }
   p <- p +
@@ -844,7 +1077,7 @@ cpm_contour_server <- function(id) {
       ggplot2::aes(x = log_x, ymin = Mean - SEM, ymax = Mean + SEM),
       width = 0.06, colour = fg, linewidth = 0.9, inherit.aes = FALSE) +
     ggplot2::geom_point(data = df, ggplot2::aes(x = log_x, y = Mean),
-      colour = fg, fill = pt_fill, size = 3.8, shape = 21, stroke = 1.8,
+      colour = fg, fill = fg, size = 3.8, shape = 21, stroke = 1.8,
       inherit.aes = FALSE) +
     ggplot2::scale_x_continuous(breaks = x_breaks,
                                 labels = as.character(x_breaks),
@@ -852,7 +1085,7 @@ cpm_contour_server <- function(id) {
     ggplot2::scale_y_continuous(limits = c(y_lo, y_hi),
                                 breaks = pretty(c(y_lo, y_hi), n = 8),
                                 expand = c(0, 0)) +
-    ggplot2::labs(x = "Log [Concentration (\u03bcM)]",
+    ggplot2::labs(x = x_title,
                   y = "Temperature (\u00b0C)") +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
@@ -869,6 +1102,125 @@ cpm_contour_server <- function(id) {
       legend.title      = ggplot2::element_text(colour = text_colour, size = 9))
 
   p
+}
+
+
+# --------------------------------------------------------------------------
+# Side panel: standard-sample contour
+# --------------------------------------------------------------------------
+# Builds a narrow companion plot showing the standard's normalised dF/dT
+# as one tile column per unique sample in the standard file, using a
+# white->panel_colour ramp (or dark->panel_colour in dark mode). Y-axis
+# matches the main plot's range; y-axis labels are suppressed since the
+# main plot to the left already has them. Each sample's name appears as
+# the x-axis tick label.
+.contour_standard_plot <- function(sp, threshold, y_lo, y_hi, dark = TRUE,
+                                   panel_colour = "auto", opacity = 0.85,
+                                   palette_name = "grayscale",
+                                   main_tile_w = NULL, main_x_range = NULL,
+                                   layout_width_ratio = 4) {
+  if (is.null(sp) || is.null(sp$norm) || ncol(sp$norm) < 1) return(NULL)
+
+  y_lo <- if (!is.null(y_lo) && !is.na(y_lo)) y_lo else min(sp$temperatures)
+  y_hi <- if (!is.null(y_hi) && !is.na(y_hi)) y_hi else max(sp$temperatures)
+  mask <- sp$temperatures >= y_lo & sp$temperatures <= y_hi
+  temps_sub <- sp$temperatures[mask]
+  temp_step <- if (length(temps_sub) > 1) mean(diff(temps_sub)) else 1.0
+
+  unique_samples <- sp$sample_names
+  # Build long-format data.frame: one row per (sample, temperature)
+  tile_rows <- lapply(seq_along(unique_samples), function(i) {
+    nv <- .contour_thresh(sp$norm[mask, i], threshold)
+    nv[is.na(nv)] <- 0
+    data.frame(sample = factor(unique_samples[i], levels = unique_samples),
+               x_idx  = i,
+               Temperature = temps_sub,
+               norm_dFdT   = nv)
+  })
+  tile_df <- do.call(rbind, Filter(Negate(is.null), tile_rows))
+
+  # Build the colour ramp.
+  #   - "auto" (default): use the same multi-stop palette as the main
+  #     plot (.contour_palette). This makes the standard panel a direct
+  #     visual extension of the main data - identical colour mapping,
+  #     just in a separate column.
+  #   - hex value: use the user's chosen single-hue ramp from the
+  #     background colour up to that colour. Useful when the user wants
+  #     the standard panel visually distinct from the main data.
+  ramp <- if (identical(panel_colour, "auto") || is.null(panel_colour)) {
+    .contour_palette(palette_name, 256)
+  } else {
+    anchor_colour <- if (dark) "#0B1623" else "white"
+    grDevices::colorRampPalette(c(anchor_colour, panel_colour))(256)
+  }
+
+  bg_colour   <- if (dark) "#0B1623" else "white"
+  axis_line   <- if (dark) "#3A4D63" else "grey40"
+  text_colour <- if (dark) CG_PALETTE$muted else "black"
+
+  # The standard plot's x-axis spans the sample indices plus expansion
+  # padding on each side (add = 0.6).
+  n_std <- length(unique_samples)
+  std_x_range <- n_std + 2 * 0.6  # left and right expand
+
+  # Compute the tile width in DATA UNITS so that its rendered PIXEL width
+  # matches the main plot's tile pixel width. Reasoning:
+  #
+  #   main tile pixel width = (main_tile_w / main_x_range) * main_panel_pixels
+  #   std panel pixels      = main_panel_pixels / layout_width_ratio
+  #     (from patchwork's plot_layout(widths = c(4, 1)), the std panel
+  #      gets 1/4 of the main panel's pixel width)
+  #
+  # For std tile pixels to equal main tile pixels:
+  #   std_tile_w / std_x_range = layout_width_ratio * main_tile_w / main_x_range
+  #
+  # Falls back to a fixed 0.85 if main geometry isn't supplied (e.g. the
+  # function is called standalone outside the renderPlot path).
+  std_tile_w <- if (!is.null(main_tile_w) && !is.null(main_x_range) &&
+                   main_x_range > 0) {
+    val <- layout_width_ratio * main_tile_w / main_x_range * std_x_range
+    # Clamp - don't let it exceed the natural per-sample spacing (1 unit)
+    # which would cause adjacent tiles to overlap in multi-sample standards.
+    min(val, 0.92)
+  } else {
+    0.85
+  }
+
+  ggplot2::ggplot(tile_df) +
+    ggplot2::geom_tile(
+      ggplot2::aes(x = x_idx, y = Temperature, fill = norm_dFdT),
+      width = std_tile_w, height = temp_step, alpha = opacity) +
+    ggplot2::scale_fill_gradientn(colours = ramp, limits = c(0, 1),
+                                  guide = "none") +
+    ggplot2::scale_x_continuous(
+      breaks = seq_along(unique_samples),
+      labels = unique_samples,
+      expand = ggplot2::expansion(add = 0.6)) +
+    ggplot2::scale_y_continuous(limits = c(y_lo, y_hi),
+                                breaks = pretty(c(y_lo, y_hi), n = 8),
+                                expand = c(0, 0)) +
+    ggplot2::labs(x = NULL, y = NULL, title = NULL) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      plot.background   = ggplot2::element_rect(fill = bg_colour, colour = NA),
+      panel.background  = ggplot2::element_rect(fill = bg_colour, colour = NA),
+      # Panel border draws a box around the standard's plotting area,
+      # visually separating it from the main plot. Replaces axis.line.x
+      # since the border serves as the bottom edge.
+      panel.border      = ggplot2::element_rect(colour = axis_line,
+                                                fill = NA, linewidth = 0.6),
+      plot.title        = ggplot2::element_text(colour = text_colour,
+                                                face = "bold", size = 11,
+                                                hjust = 0.5),
+      axis.title        = ggplot2::element_blank(),
+      axis.text.x       = ggplot2::element_text(colour = text_colour, size = 9,
+                                                angle = 45, hjust = 1),
+      axis.text.y       = ggplot2::element_blank(),
+      axis.ticks.y      = ggplot2::element_blank(),
+      axis.line.x       = ggplot2::element_blank(),
+      axis.line.y       = ggplot2::element_blank(),
+      panel.grid        = ggplot2::element_blank(),
+      plot.margin       = ggplot2::margin(5, 8, 5, 4))
 }
 
 # ---- Example data loaders --------------------------------------------------
