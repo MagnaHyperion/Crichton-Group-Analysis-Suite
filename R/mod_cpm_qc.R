@@ -195,7 +195,16 @@ cpm_qc_ui <- function(id) {
                 shiny::textInput(ns("mqc_title"), "Plot title",
                                  placeholder = "e.g. HsUCP1 Multi-Ligand QC"),
                 shiny::numericInput(ns("mqc_linewidth"), "Line width",
-                                    value = 1.5, min = 0.5, max = 4, step = 0.25)
+                                    value = 1.5, min = 0.5, max = 4, step = 0.25),
+                shiny::checkboxInput(ns("mqc_show_tm_labels"),
+                                     "Show Tm values above bars", value = FALSE),
+                shiny::tags$hr(style = "border-color:#2A3B52;margin:0.6rem 0;"),
+                shiny::tags$label("\u0394Tm reference sample",
+                                  style = "color:var(--muted);font-size:0.78rem;"),
+                info_box(paste("The \u0394Tm plot shows each sample's Tm minus",
+                               "the reference sample's Tm. Pick which sample",
+                               "acts as the reference (\u0394Tm = 0).")),
+                shiny::uiOutput(ns("mqc_reference_ui"))
               ),
               lab_card(
                 step_title(5, "Generate"),
@@ -220,6 +229,10 @@ cpm_qc_ui <- function(id) {
               lab_card(
                 shiny::div(class = "lab-card-title", "\U0001f4ca  Tm Comparison"),
                 shiny::plotOutput(ns("mqc_tm_plot"), height = "320px")
+              ),
+              lab_card(
+                shiny::div(class = "lab-card-title", "\U0001f4c9  \u0394Tm vs Reference"),
+                shiny::plotOutput(ns("mqc_dtm_plot"), height = "320px")
               )
             )  # close preview-col
           )
@@ -663,7 +676,31 @@ cpm_qc_server <- function(id) {
       shiny::tagList(rows)
     })
 
-    # ---- Multi-mode plot generation -------------------------------------
+    # Reference-sample selector for the delta-Tm plot. Choices are the
+    # currently-selected samples, shown by their display label (override
+    # or default name). Values are the sample IDs so the selection stays
+    # stable even when the user renames a sample. Defaults to the first
+    # selected sample.
+    output$mqc_reference_ui <- shiny::renderUI({
+      d <- mqc_data()
+      if (is.null(d) || !is.null(d$error)) return(NULL)
+      sids <- if (!is.null(input$samples) && length(input$samples) > 0)
+                input$samples
+              else
+                as.character(d$sample_ids[seq_len(min(length(d$sample_ids), 10))])
+      if (length(sids) == 0) return(NULL)
+      # Build display labels the same way .run_multi does
+      labels <- sapply(seq_along(sids), function(i) {
+        ov  <- trimws(input[[paste0("mqc_lbl_", i)]] %||% "")
+        idx <- which(d$sample_ids == sids[i])[1]
+        if (nchar(ov) > 0) ov
+        else if (!is.na(idx)) d$sample_names[idx] else sids[i]
+      })
+      choice_vec <- stats::setNames(sids, labels)
+      shiny::selectInput(ns("mqc_reference"), NULL,
+                         choices = choice_vec, selected = sids[1],
+                         width = "100%")
+    })
     .run_multi <- function() {
       d <- mqc_data()
       if (is.null(d) || !is.null(d$error)) return(invisible())
@@ -743,8 +780,73 @@ cpm_qc_server <- function(id) {
           angle = if (n > 4) 35 else 0,
           hjust = if (n > 4) 1 else 0.5))
 
+      # Tm value labels above each bar (optional, mirrors simple mode)
+      if (isTRUE(input$mqc_show_tm_labels)) {
+        p_tm <- p_tm +
+          ggplot2::geom_text(data = tm_df,
+            ggplot2::aes(x = x_num, y = Tm + 0.8,
+                         label = sprintf("%.1f\u00b0C", Tm),
+                         colour = Sample),
+            vjust = 0, size = 3.2, fontface = "bold",
+            inherit.aes = FALSE) +
+          ggplot2::scale_colour_manual(values = pal, guide = "none")
+      }
+
+      # ---- Delta-Tm plot -------------------------------------------------
+      # Each sample's Tm minus the reference sample's Tm. The reference
+      # is selected in the UI (defaults to the first selected sample) and
+      # appears at delta = 0. Points with value labels, sample name on x.
+      ref_sid <- input$mqc_reference
+      # Map the chosen reference sample-id to its position among the
+      # selected samples; fall back to the first sample if unset/stale.
+      ref_pos <- if (!is.null(ref_sid)) match(ref_sid, sids) else NA_integer_
+      if (is.na(ref_pos)) ref_pos <- 1
+      ref_tm    <- tms[ref_pos]
+      ref_label <- labels[ref_pos]
+      dtms      <- tms - ref_tm
+
+      dtm_df <- data.frame(Sample = factor(labels, levels = labels),
+                           dTm = dtms, x_num = seq_len(n),
+                           stringsAsFactors = FALSE)
+
+      # Symmetric-ish y-range with headroom for the labels; always include 0
+      dtm_rng  <- range(c(0, dtms), na.rm = TRUE)
+      dtm_pad  <- max(1, diff(dtm_rng) * 0.15)
+      dtm_lo   <- floor(dtm_rng[1] - dtm_pad)
+      dtm_hi   <- ceiling(dtm_rng[2] + dtm_pad)
+
+      p_dtm <- ggplot2::ggplot(dtm_df) +
+        ggplot2::geom_hline(yintercept = 0, linewidth = 0.5,
+                            colour = "grey60", linetype = "dashed") +
+        ggplot2::geom_point(ggplot2::aes(x = x_num, y = dTm, fill = Sample),
+                            size = 4, shape = 21, colour = "black",
+                            stroke = 0.7, show.legend = FALSE) +
+        ggplot2::geom_text(ggplot2::aes(x = x_num,
+                                        y = dTm + (dtm_hi - dtm_lo) * 0.04,
+                                        label = ifelse(abs(dTm) < 0.05, "0.0",
+                                                       sprintf("%+.1f", dTm))),
+                           vjust = 0, size = 3.2, fontface = "bold",
+                           colour = "black") +
+        ggplot2::scale_fill_manual(values = pal) +
+        ggplot2::scale_x_continuous(breaks = seq_len(n), labels = labels,
+                                    limits = c(0.4, n + 0.6), expand = c(0, 0)) +
+        ggplot2::scale_y_continuous(limits = c(dtm_lo, dtm_hi),
+                                    expand = ggplot2::expansion(mult = c(0.04, 0.04))) +
+        ggplot2::labs(
+          title = {
+            base <- sprintf("\u0394T\u2098 vs %s", ref_label)
+            if (nchar(title) > 0) paste(title, "\u2014", base) else base
+          },
+          x = NULL, y = "\u0394T\u2098 (\u00b0C)") +
+        .qc_prism_theme(legend_pos = "none") +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(
+          angle = if (n > 4) 35 else 0,
+          hjust = if (n > 4) 1 else 0.5))
+
       mqc_results(list(p_raw = p_raw, p_dfdt = p_dfdt, p_tm = p_tm,
-                       tms = tms, labels = labels, title = title, n = n))
+                       p_dtm = p_dtm, tms = tms, dtms = dtms,
+                       ref_label = ref_label, labels = labels,
+                       title = title, n = n))
     }
 
     # Trigger 1: user clicked "Generate QC Plots" (multi)
@@ -766,6 +868,14 @@ cpm_qc_server <- function(id) {
       .multi_pending_run(FALSE)
       .run_multi()
     })
+
+    # Changing the delta-Tm reference sample rebuilds the plots so the
+    # dTm chart updates without a manual re-generate. Only fires once
+    # results already exist (i.e. after the first generate), so it
+    # doesn't race the initial auto-run.
+    shiny::observeEvent(input$mqc_reference, {
+      if (!is.null(mqc_results())) .run_multi()
+    }, ignoreInit = TRUE)
 
     output$mqc_badges <- shiny::renderUI({
       shiny::req(mqc_results())
@@ -797,6 +907,8 @@ cpm_qc_server <- function(id) {
       .qc_dark_overlay(mqc_results()$p_dfdt) }, bg = CG_PALETTE$bg_card)
     output$mqc_tm_plot   <- shiny::renderPlot({ shiny::req(mqc_results())
       .qc_dark_overlay(mqc_results()$p_tm) },   bg = CG_PALETTE$bg_card)
+    output$mqc_dtm_plot  <- shiny::renderPlot({ shiny::req(mqc_results())
+      .qc_dark_overlay(mqc_results()$p_dtm) },  bg = CG_PALETTE$bg_card)
 
     output$mqc_download_buttons <- shiny::renderUI({
       shiny::req(mqc_results())
@@ -804,6 +916,7 @@ cpm_qc_server <- function(id) {
         shiny::downloadButton(ns("mqc_dl_raw"),  "\u2193 PNG Fluorescence", class = "btn-download"), " ",
         shiny::downloadButton(ns("mqc_dl_dfdt"), "\u2193 PNG dF/dT",        class = "btn-download"), " ",
         shiny::downloadButton(ns("mqc_dl_tm"),   "\u2193 PNG Tm Chart",     class = "btn-download"), " ",
+        shiny::downloadButton(ns("mqc_dl_dtm"),  "\u2193 PNG \u0394Tm Plot",  class = "btn-download"), " ",
         shiny::downloadButton(ns("mqc_dl_csv"),  "\u2193 CSV Summary",      class = "btn-download")
       )
     })
@@ -823,16 +936,25 @@ cpm_qc_server <- function(id) {
         r <- mqc_results()
         .save_mqc(r$p_tm, f, w = max(4, 1.2 * r$n), h = 5)
       })
+    output$mqc_dl_dtm  <- shiny::downloadHandler(
+      filename = function() ts_filename("CPM_multiQC_dTm", "png"),
+      content  = function(f) {
+        r <- mqc_results()
+        .save_mqc(r$p_dtm, f, w = max(4, 1.2 * r$n), h = 5)
+      })
     output$mqc_dl_csv  <- shiny::downloadHandler(
       filename = function() ts_filename("CPM_multiQC", "csv"),
       content  = function(file) {
         r   <- mqc_results()
         tms <- r$tms
+        # dTm relative to the chosen reference sample (r$dtms), not just
+        # the first sample - keeps the CSV consistent with the plot.
         utils::write.csv(data.frame(
-          Label    = names(tms),
-          Tm_degC  = as.numeric(tms),
-          dTm_degC = as.numeric(tms) - as.numeric(tms[1]),
-          Date     = Sys.time()
+          Label        = r$labels,
+          Tm_degC      = as.numeric(tms),
+          dTm_degC     = as.numeric(r$dtms),
+          Reference    = r$ref_label,
+          Date         = Sys.time()
         ), file, row.names = FALSE)
       })
 

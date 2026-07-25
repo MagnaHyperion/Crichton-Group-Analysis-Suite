@@ -3054,10 +3054,10 @@
       "checksum": "165f7627623d949dad6a4ad728c5edd0"
     },
     "R/mod_cpm_contour.R": {
-      "checksum": "080998ce6ab90deffd1576fb557d96e5"
+      "checksum": "102297faf6147aa97705f00f11314ee9"
     },
     "R/mod_cpm_qc.R": {
-      "checksum": "9ee25c3dea6553efd434f975774817a3"
+      "checksum": "eb9646f0ece7c046048511c5c48b2ba2"
     },
     "R/mod_gel.R": {
       "checksum": "26e35caee7d09ed43ca8ac1c8c3979d7"
